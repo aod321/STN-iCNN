@@ -16,8 +16,8 @@ from PIL import Image, ImageDraw
 import math
 import cv2
 import matplotlib.pyplot as plt
-from prepcess import GaussianNoise, RandomAffine, Blurfilter, \
-    ToPILImage, ToTensor, Stage2_ToTensor, Stage2_ToPILImage, Stage2_RandomAffine, Stage2_GaussianNoise
+from preprocess import Resize, GaussianNoise, RandomAffine, Blurfilter, \
+    ToPILImage, ToTensor, Stage2_ToTensor, Stage2_RandomAffine, Stage2_GaussianNoise, Stage2ToPILImage
 
 
 class Stage1Augmentation(object):
@@ -179,7 +179,7 @@ class Stage2Augmentation(object):
                                                      scale=(1, 1)),
                                         transforms.RandomOrder([Stage2_GaussianNoise(),
                                                                 Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                             scale=(0.9, 1.1))
+                                                                                    scale=(0.9, 1.1))
                                                                 ]
                                                                )
                                         ],
@@ -188,54 +188,55 @@ class Stage2Augmentation(object):
                                         RandomAffine(degrees=30, translate=(0.3, 0.3), scale=(0.8, 1.5)),
                                         transforms.RandomOrder([Stage2_GaussianNoise(),
                                                                 Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                             scale=(0.8, 1.5))
+                                                                                    scale=(0.8, 1.5))
                                                                 ]
                                                                )
                                         ],
             # random_choice 3:  noise + blur , noise + rotation ,noise + blur + rotation_scale_translate
             self.augmentation_name[3]: [transforms.RandomOrder([Stage2_RandomAffine(degrees=30, translate=(0.3, 0.2),
-                                                                             scale=(0.8, 1.5)),
+                                                                                    scale=(0.8, 1.5)),
                                                                 Stage2_RandomAffine(degrees=30, translate=(0.2, 0.3),
-                                                                             scale=(1, 1.5))
+                                                                                    scale=(1, 1.5))
                                                                 ]
                                                                ),
                                         transforms.RandomOrder([
-                                                                Stage2_RandomAffine(degrees=30, translate=None,
-                                                                             scale=(1, 1)),                                                                
-                                                                Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
-                                                                             scale=(1, 1))
-                                                                ]
-                                                               
-                                                               ),
+                                            Stage2_RandomAffine(degrees=30, translate=None,
+                                                                scale=(1, 1)),
+                                            Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
+                                                                scale=(1, 1))
+                                        ]
+
+                                        ),
                                         transforms.RandomOrder([Stage2_GaussianNoise(),
                                                                 Stage2_RandomAffine(degrees=30, translate=(0.8, 0.8),
-                                                                             scale=(1, 1.5))]
+                                                                                    scale=(1, 1.5))]
                                                                ),
                                         transforms.RandomOrder([Stage2_RandomAffine(degrees=30, translate=None,
-                                                                                    scale=(1, 1))],
+                                                                                    scale=(1, 1)),
                                                                Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
                                                                                    scale=(0.5, 1.5))
+                                                                ]
                                                                )
                                         ],
             # random_choice 4:  noise + crop , blur + crop ,noise + blur + crop + rotation_scale_translate
-            self.augmentation_name[4]: [transforms.RandomOrder([RandomAffine(degrees=15, translate=(0.3, 0.3),
-                                                                             scale=(0.5, 1)),
-                                                                RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                             scale=(0.5, 1))
+            self.augmentation_name[4]: [transforms.RandomOrder([Stage2_RandomAffine(degrees=15, translate=(0.3, 0.3),
+                                                                                    scale=(0.5, 1)),
+                                                                Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                                    scale=(0.5, 1))
                                                                 ]
                                                                ),
-                                        transforms.Compose([Blurfilter(),
-                                                            RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                         scale=(0.5, 2)),
+                                        transforms.Compose([Stage2_GaussianNoise(),
+                                                            Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                                scale=(0.5, 2)),
                                                             ]
                                                            ),
                                         transforms.RandomOrder([
-                                                                RandomAffine(degrees=0, translate=(0.3, 0.3),
-                                                                  scale=(0.5, 1)),
-                                                                RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                             scale=(1, 1.5))
-                                                                ]
-                                                               )
+                                            Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
+                                                                scale=(0.5, 1)),
+                                            Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                scale=(1, 1.5))
+                                        ]
+                                        )
                                         ]
         }
         self.randomchoice = choice
@@ -246,28 +247,28 @@ class Stage2Augmentation(object):
     def set_transformers(self):
         self.transforms = {
             self.augmentation_name[0]: transforms.Compose([
-                Stage2_ToPILImage(),
-                ToTensor()
+                Stage2ToPILImage(),
+                Stage2_ToTensor()
             ]),
             self.augmentation_name[1]: transforms.Compose([
-                Stage2_ToPILImage(),
+                Stage2ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice1']),
-                ToTensor()
+                Stage2_ToTensor()
             ]),
             self.augmentation_name[2]: transforms.Compose([
-                Stage2_ToPILImage(),
+                Stage2ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice2']),
-                ToTensor()
+                Stage2_ToTensor()
             ]),
             self.augmentation_name[3]: transforms.Compose([
-                Stage2_ToPILImage(),
+                Stage2ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice3']),
-                ToTensor()
+                Stage2_ToTensor()
             ]),
             self.augmentation_name[4]: transforms.Compose([
-                Stage2_ToPILImage(),
+                Stage2ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice4']),
-                ToTensor()
+                Stage2_ToTensor()
             ])
         }
 

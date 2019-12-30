@@ -7,6 +7,7 @@ import numpy as np
 import random
 from skimage.util import random_noise
 from PIL import ImageFilter, Image
+import torch.nn.functional as F
 
 
 class Resize(transforms.Resize):
@@ -25,12 +26,13 @@ class Resize(transforms.Resize):
         """
         image, labels = sample['image'], sample['labels']
         parts, parts_mask = sample['parts_gt'], sample['parts_gt']
+        resized_image = F.interpolate(image.unsqueeze(0), self.size, mode='bilinear', align_corners=True).squeeze(0)
 
-        resized_image = TF.resize(image, self.size, Image.ANTIALIAS)
-
-        resized_labels = [TF.resize(labels[r], self.size, Image.ANTIALIAS)
-                          for r in range(len(labels))
-                          ]
+        resized_labels = torch.cat(
+            [F.interpolate(labels[r:r+1].unsqueeze(0), self.size, mode='nearest').squeeze(0)
+             for r in range(len(labels))
+             ], dim=0)
+        assert resized_labels.shape == (9, 128, 128)
 
         sample = {'image': resized_image, 'labels': resized_labels,
                   'orig': sample['orig'], 'orig_label': sample['orig_label'],
@@ -54,7 +56,7 @@ class ToTensor(transforms.ToTensor):
                     Tensor: Converted image.
         """
         image, labels = sample['image'], sample['labels']
-        parts, parts_mask = sample['parts_gt'], sample['parts_gt']
+        parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
 
         labels = [TF.to_tensor(labels[r])
                   for r in range(len(labels))
@@ -64,12 +66,11 @@ class ToTensor(transforms.ToTensor):
         parts = torch.stack([TF.to_tensor(parts[r])
                              for r in range(len(parts))])
 
-        parts_mask = torch.stack([TF.to_tensor(parts_mask[r])
+        parts_mask = torch.cat([TF.to_tensor(parts_mask[r])
                                   for r in range(len(parts_mask))])
 
         assert parts.shape == (6, 3, 81, 81)
         assert parts_mask.shape == (6, 81, 81)
-        assert labels.shape == (6, 128, 128)
 
         sample = {'image': TF.to_tensor(image), 'labels': labels, 'orig': sample['orig'],
                   'orig_label': sample['orig_label'],
@@ -78,7 +79,34 @@ class ToTensor(transforms.ToTensor):
         return sample
 
 
-class OrigPad(transforms.Resize):
+class Stage2_ToTensor(transforms.ToTensor):
+    """Convert a ``PIL Image`` or ``numpy.ndarray`` to tensor.
+
+         Override the __call__ of transforms.ToTensor
+    """
+
+    def __call__(self, sample):
+        """
+                Args:
+                    dict of pic (PIL Image or numpy.ndarray): Image to be converted to tensor.
+
+                Returns:y
+                    Tensor: Converted image.
+        """
+        parts, parts_mask = sample['image'], sample['labels']
+
+        parts = torch.stack([TF.to_tensor(parts[r])
+                             for r in range(len(parts))])
+
+        parts_mask = torch.cat([TF.to_tensor(parts_mask[r])
+                                for r in range(len(parts_mask))])
+
+        sample = {'image': parts, 'labels': parts_mask}
+
+        return sample
+
+
+class OrigPad(object):
     def __init__(self):
         super(OrigPad, self).__init__()
 
@@ -94,6 +122,7 @@ class OrigPad(transforms.Resize):
         image, labels = sample['image'], sample['labels']
         parts, parts_mask = sample['parts_gt'], sample['parts_gt']
         orig_label = sample['orig_label']
+        orig = TF.to_pil_image(sample['orig'])
 
         desired_size = 1024
         delta_width = desired_size - orig.size[0]
@@ -104,12 +133,11 @@ class OrigPad(transforms.Resize):
 
         pad_orig = TF.to_tensor(TF.pad(orig, tuple(padding)))
 
-        orig_label = [TF.to_tensor(TF.pad(orig_label[r], tuple(padding)))
+        orig_label = [TF.to_tensor(TF.pad(TF.to_pil_image(orig_label[r]), tuple(padding)))
                       for r in range(len(orig_label))
                       ]
         orig_label = torch.cat(orig_label, dim=0).float()
-        orig_label[0] = 1 - torch.sum(orig_label[1:], dim=0, keepdim=True)
-        orig_label = orig_label.argmax(dim=0, keepdim=False).float()  # Shape(H, W) 
+        orig_label[0] = torch.tensor(1.) - torch.sum(orig_label[1:], dim=0, keepdim=True)
 
         assert pad_orig.shape == (3, 1024, 1024)
         assert orig_label.shape == (9, 1024, 1024)
@@ -136,32 +164,6 @@ class RandomAffine(transforms.RandomAffine):
                   for r in range(len(labels))]
         sample = {'image': img, 'labels': labels, 'orig': sample['orig'], 'orig_label': sample['orig_label'],
                   'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_gt']}
-        return sample
-
-
-class Stage2RandomAffine(transforms.RandomAffine):
-
-    def __call__(self, sample):
-        """
-            img (PIL Image): Image to be transformed.
-
-        Returns:
-            PIL Image: Affine transformed image.
-        """
-        parts = sample['parts_gt']
-        parts_mask = sample['parts_mask_gt']
-
-        ret = self.get_params(self.degrees, self.translate, self.scale, self.shear, img.size)
-        parts = [TF.affine(parts[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
-                 for r in range(len(parts))]
-
-        parts_mask = [TF.affine(parts_mask[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
-                      for r in range(len(labels))]
-
-        sample = {'image': sample['image'], 'labels': sample['labels'], 'orig': sample['orig'],
-                  'orig_label': sample['orig_label'], 'parts_gt': parts,
-                  'parts_mask_gt': parts_mask
-                  }
         return sample
 
 
@@ -211,39 +213,16 @@ class Stage2ToPILImage(object):
                 Returns:
                     dict of sample(PIL,List of PIL): Converted image and Labels.
         """
-        parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
+        parts, parts_mask = sample['image'], sample['labels']
 
-        assert parts.shape == (6, 3, 81, 81)
-        assert parts_mask.shape == (6, 81, 81)
         parts = [TF.to_pil_image(parts[r])
                  for r in range(len(parts))]
 
         parts_mask = [TF.to_pil_image(parts_mask[r])
                       for r in range(len(parts_mask))]
 
-        sample = {'image': sample['image'], 'labels': sample['labels'], 'orig': sample['orig'],
-                  'orig_label': sample['orig_label'], 'parts_gt': parts,
-                  'parts_mask_gt': parts_mask
-                  }
+        sample = {'image': parts, 'labels': parts_mask}
 
-        return sample
-
-
-class Stage2_GaussianNoise(object):
-    def __call__(self, sample):
-        parts = sample['parts_gt']
-        parts = [np.array(parts[r], np.uint8)
-                 for r in range(len(parts))]
-        parts = [random_noise(parts[r])
-                 for r in range(len(parts))]
-        parts = [TF.to_pil_image(np.uint8(255 * parts[r]))
-                 for r in range(len(parts))
-                 ]
-
-        sample = {'image': sample['image'], 'labels': sample['labels'], 'orig': sample['orig'],
-                  'orig_label': sample['orig_label'], 'parts_gt': parts,
-                  'parts_mask_gt': sample['parts_mask_gt']
-                  }
         return sample
 
 
@@ -271,4 +250,37 @@ class Blurfilter(object):
                   'parts_mask_gt': sample['parts_mask_gt']
                   }
 
+        return sample
+
+
+class Stage2_RandomAffine(transforms.RandomAffine):
+
+    def __call__(self, sample):
+        """
+            img (PIL Image): Image to be transformed.
+
+        Returns:
+            PIL Image: Affine transformed image.
+        """
+        img, labels = sample['image'], sample['labels']
+        ret = self.get_params(self.degrees, self.translate, self.scale, self.shear, img.size)
+        img = [TF.affine(img[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
+               for r in range(len(img))]
+        labels = [TF.affine(labels[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
+                  for r in range(len(labels))]
+        sample = {'image': img, 'labels': labels}
+        return sample
+
+
+class Stage2_GaussianNoise(object):
+    def __call__(self, sample):
+        parts = sample['image']
+        parts = [np.array(parts[r], np.uint8)
+                 for r in range(len(parts))]
+        parts = [random_noise(parts[r])
+                 for r in range(len(parts))]
+        parts = [TF.to_pil_image(np.uint8(255 * parts[r]))
+                 for r in range(len(parts))
+                 ]
+        sample = {'image': parts, 'labels': sample['labels']}
         return sample

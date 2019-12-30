@@ -32,9 +32,6 @@ class Stage2Model(nn.Module):
         mouth_pred = self.model[3](parts[:, 5])
         predict = [eyebrow1_pred, eyebrow2_pred,
                    eye1_pred, eye2_pred, nose_pred, mouth_pred]
-        for i in range(len(predict)):
-            predict[i] = F.softmax(predict[i], dim=1)
-
         return predict
 
 
