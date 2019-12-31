@@ -1,16 +1,22 @@
-from utils.template import TemplateModel
+from template import TemplateModel
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from datasets.dataset import HelenDataset
-from torchvision import transforms
+import torch.optim as optim
 import argparse
 import numpy as np
 from tensorboardX import SummaryWriter
-import tensorboardX as tb
+from icnnmodel import FaceModel as Stage1Model
 import uuid as uid
+import os
+from torchvision import transforms
+from helper_funcs import F1Score, calc_centroid, affine_crop, affine_mapback
+from preprocess import ToPILImage, ToTensor, OrigPad, Resize
+from torch.utils.data import DataLoader
+from dataset import HelenDataset
+from model import Stage2Model, SelectNet
+from helper_funcs import affine_crop
+
 uuid = str(uid.uuid1())[0:8]
 print(uuid)
 parser = argparse.ArgumentParser()
@@ -25,32 +31,52 @@ parser.add_argument("--eval_per_epoch", default=1, type=int, help="eval_per_epoc
 args = parser.parse_args()
 print(args)
 
+# Dataset and Dataloader
 # Dataset Read_in Part
 root_dir = "/data1/yinzi/datas"
+parts_root_dir = "/home/yinzi/data3/recroped_parts"
 
 txt_file_names = {
     'train': "exemplars.txt",
-    'val': "tuning.txt"
+    'val': "tuning.txt",
+    'test': "testing.txt"
 }
 
 transforms_list = {
     'train':
         transforms.Compose([
-            ToPILImage(),
-            Resize((64, 64)),
-            ToTensor()
+            ToTensor(),
+            Resize((128, 128)),
+            OrigPad()
         ]),
     'val':
         transforms.Compose([
-            ToPILImage(),
-            Resize((64, 64)),
-            ToTensor()
+            ToTensor(),
+            Resize((128, 128)),
+            OrigPad()
+        ]),
+    'test':
+        transforms.Compose([
+            ToTensor(),
+            Resize((128, 128)),
+            OrigPad()
         ])
 }
+
 # DataLoader
+Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
+                           root_dir=root_dir,
+                           parts_root_dir=parts_root_dir,
+                           transform=transforms_list[x]
+                           )
+           for x in ['train', 'val', 'test']
+           }
 
+dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
+                            shuffle=True, num_workers=4)
+              for x in ['train', 'val', 'test']
+              }
 
- 
 
 class TrainModel(TemplateModel):
 
@@ -81,8 +107,8 @@ class TrainModel(TemplateModel):
         self.scheduler2 = optim.lr_scheduler.StepLR(self.optimizer2, step_size=5, gamma=0.5)
         self.scheduler3 = optim.lr_scheduler.StepLR(self.optimizer_select, step_size=5, gamma=0.5)
 
-        self.train_loader = stage1_dataloaders['train']
-        self.eval_loader = stage1_dataloaders['val']
+        self.train_loader = dataloader['train']
+        self.eval_loader = dataloader['val']
 
         self.ckpt_dir = "checkpoints_ABC/%s" % uuid
         self.display_freq = args.display_freq
@@ -101,18 +127,16 @@ class TrainModel(TemplateModel):
         theta = self.select_net(F.softmax(stage1_pred, dim=1))
         assert theta.shape == (N, 6, 2, 3)
 
-        parts, parts_label = self.affine_cropper(orig, orig_label, theta)
+        parts, parts_label, _ = affine_crop(img=orig, label=orig_label, theta_in=theta, map_location=self.device)
+        assert parts.shape == (N, 6, 3, 81, 81)
 
         assert parts.grad_fn is not None
-        
-        assert parts.shape == (N, 6, 3, 81, 81)
-        assert parts_label.shape == (N, 6, 81, 81) 
 
         stage2_pred = self.model2(parts)
         assert len(stage2_pred) == 6
         loss = []
         for i in range(6):
-            loss.append(self.criterion(stage2_pred[i], parts_label[i].long()))
+            loss.append(self.criterion(stage2_pred[i], parts_label[i].argmax(dim=1, keepdim=False)))
         loss = torch.stack(loss)
         return loss
 
@@ -128,21 +152,21 @@ class TrainModel(TemplateModel):
 
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
             assert theta.shape == (N, 6, 2, 3)
-
-            parts, parts_label = affine_cropper(orig, orig_label, theta)
+            parts, parts_label, _ = affine_crop(img=orig, label=orig_label, theta_in=theta, map_location=self.device)
             assert parts.shape == (N, 6, 3, 81, 81)
-            assert parts_label.shape == (N, 6, 81, 81) 
 
             stage2_pred = self.model2(parts)
             assert len(stage2_pred) == 6
             loss = []
             for i in range(6):
-                loss.append(self.criterion(stage2_pred[i], parts_label[i].long()).item())
+                loss.append(self.criterion(stage2_pred[i], parts_label[i].argmax(dim=1, keepdim=False)).item())
             loss_list.append(np.mean(loss))
         return np.mean(loss_list)
 
     def train(self):
         self.model.train()
+        self.model2.train()
+        self.select_net.train()
         self.epoch += 1
         for batch in self.train_loader:
             self.step += 1
@@ -162,12 +186,14 @@ class TrainModel(TemplateModel):
 
     def eval(self):
         self.model.eval()
+        self.model2.eval()
+        self.select_net.eval()
         error = self.eval_error()
 
         if error < self.best_error:
             self.best_error = error
-            self.save_state(osp.join(self.ckpt_dir, 'best.pth.tar'), False)
-        self.save_state(osp.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
+            self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
+        self.save_state(os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
         self.writer.add_scalar('error', error, self.epoch)
         print('epoch {}\terror {:.3}\tbest_error {:.3}'.format(self.epoch, error, self.best_error))
 
@@ -195,6 +221,21 @@ class TrainModel(TemplateModel):
         state['best_error'] = self.best_error
         torch.save(state, fname)
         print('save model at {}'.format(fname))
+
+    def load_pretrained(self, model):
+        if model == 'model1':
+            fname = "a"
+            state = torch.load(fname, map_location=self.device)
+            self.model.load_state_dict(state['model1'])
+        elif model == 'model2':
+            fname = "b"
+            state = torch.load(fname, map_location=self.device)
+            self.model.load_state_dict(state['model2'])
+        elif model == 'select_net':
+            fname = "c"
+            state = torch.load(fname, map_location=self.device)
+            self.model.load_state_dict(state['select_net'])
+
 
 def start_train():
     train = TrainModel(args)

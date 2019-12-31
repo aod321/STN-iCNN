@@ -1,16 +1,22 @@
-from utils.template import TemplateModel
+from template import TemplateModel
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from datasets.dataset import HelenDataset
-from torchvision import transforms
+import torch.optim as optim
 import argparse
 import numpy as np
 from tensorboardX import SummaryWriter
-import tensorboardX as tb
+from icnnmodel import FaceModel as Stage1Model
 import uuid as uid
+import os
+from torchvision import transforms
+from helper_funcs import F1Score, calc_centroid, affine_crop, affine_mapback
+from preprocess import ToPILImage, ToTensor, OrigPad, Resize
+from torch.utils.data import DataLoader
+from dataset import HelenDataset
+from model import Stage2Model, SelectNet
+from helper_funcs import affine_crop
+
 uuid = str(uid.uuid1())[0:8]
 print(uuid)
 parser = argparse.ArgumentParser()
@@ -25,32 +31,52 @@ parser.add_argument("--eval_per_epoch", default=1, type=int, help="eval_per_epoc
 args = parser.parse_args()
 print(args)
 
+# Dataset and Dataloader
 # Dataset Read_in Part
 root_dir = "/data1/yinzi/datas"
+parts_root_dir = "/home/yinzi/data3/recroped_parts"
 
 txt_file_names = {
     'train': "exemplars.txt",
-    'val': "tuning.txt"
+    'val': "tuning.txt",
+    'test': "testing.txt"
 }
 
 transforms_list = {
     'train':
         transforms.Compose([
-            ToPILImage(),
+            ToTensor(),
             Resize((128, 128)),
-            ToTensor()
+            OrigPad()
         ]),
     'val':
         transforms.Compose([
-            ToPILImage(),
+            ToTensor(),
             Resize((128, 128)),
-            ToTensor()
+            OrigPad()
+        ]),
+    'test':
+        transforms.Compose([
+            ToTensor(),
+            Resize((128, 128)),
+            OrigPad()
         ])
 }
+
 # DataLoader
+Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
+                           root_dir=root_dir,
+                           parts_root_dir=parts_root_dir,
+                           transform=transforms_list[x]
+                           )
+           for x in ['train', 'val', 'test']
+           }
 
+dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
+                            shuffle=True, num_workers=4)
+              for x in ['train', 'val', 'test']
+              }
 
- 
 
 class TrainModel(TemplateModel):
 
@@ -62,7 +88,7 @@ class TrainModel(TemplateModel):
         self.epoch = 0
         self.best_error = float('Inf')
 
-        self.device = torch.device("cuda:%d" %args.cuda if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:%d" % args.cuda if torch.cuda.is_available() else "cpu")
 
         self.model = Stage1Model().to(self.device)
         self.load_pretrained("model1")
@@ -72,7 +98,7 @@ class TrainModel(TemplateModel):
         self.load_pretrained("select_net")
         self.optimizer = optim.Adam(self.model.parameters(), self.args.lr)
         self.optimizer2 = optim.Adam(self.model2.parameters(), self.args.lr2)
-        self.optimizer_select = optim.Adam(self.select_net.parameters(), self.args.lr_s) 
+        self.optimizer_select = optim.Adam(self.select_net.parameters(), self.args.lr_s)
 
         self.criterion = nn.CrossEntropyLoss()
         self.metric = nn.CrossEntropyLoss()
@@ -81,8 +107,8 @@ class TrainModel(TemplateModel):
         self.scheduler2 = optim.lr_scheduler.StepLR(self.optimizer2, step_size=5, gamma=0.5)
         self.scheduler3 = optim.lr_scheduler.StepLR(self.optimizer_select, step_size=5, gamma=0.5)
 
-        self.train_loader = stage1_dataloaders['train']
-        self.eval_loader = stage1_dataloaders['val']
+        self.train_loader = dataloader['train']
+        self.eval_loader = dataloader['val']
 
         self.ckpt_dir = "checkpoints_AB/%s" % uuid
         self.display_freq = args.display_freq
@@ -94,7 +120,7 @@ class TrainModel(TemplateModel):
         image, labels = batch['image'].to(self.device), batch['labels'].to(self.device)
         orig = batch['orig'].to(self.device)
         orig_label = batch['orig_label'].to(self.device)
-        N,L,H,W = orig_label.shape
+        N, L, H, W = orig_label.shape
 
         stage1_pred = self.model(image)
         assert stage1_pred.shape == (N, 9, 128, 128)
@@ -115,7 +141,6 @@ class TrainModel(TemplateModel):
             theta_label[:, i, 1, 1] = (81. - 1.) / (H - 1)
             theta_label[:, i, 1, 2] = -1. + (2. * points[:, i, 0]) / (H - 1)
 
-
         loss = self.regress_loss(theta, theta_label)
 
         return loss
@@ -126,7 +151,7 @@ class TrainModel(TemplateModel):
             image, labels = batch['image'].to(self.device), batch['labels'].to(self.device)
             orig = batch['orig'].to(self.device)
             orig_label = batch['orig_label'].to(self.device)
-            N,L,H,W = orig_label.shape
+            N, L, H, W = orig_label.shape
 
             stage1_pred = self.model(image)
             assert stage1_pred.shape == (N, 9, 128, 128)
@@ -139,7 +164,7 @@ class TrainModel(TemplateModel):
             assert cens.shape == (N, 9, 2)
             points = torch.cat([cens[:, 1:6],
                                 cens[:, 6:9].mean(dim=1, keepdim=True)],
-                            dim=1)
+                               dim=1)
             theta_label = torch.zeros((N, 6, 2, 3), device=self.device, requires_grad=False)
             for i in range(6):
                 theta_label[:, i, 0, 0] = (81. - 1.) / (W - 1)
@@ -152,6 +177,8 @@ class TrainModel(TemplateModel):
 
     def train(self):
         self.model.train()
+        # self.model2.train()
+        self.select_net.train()
         self.epoch += 1
         for batch in self.train_loader:
             self.step += 1
@@ -170,12 +197,14 @@ class TrainModel(TemplateModel):
 
     def eval(self):
         self.model.eval()
+        # self.model2.eval()
+        self.select_net.eval()
         error = self.eval_error()
 
         if error < self.best_error:
             self.best_error = error
-            self.save_state(osp.join(self.ckpt_dir, 'best.pth.tar'), False)
-        self.save_state(osp.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
+            self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
+        self.save_state(os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
         self.writer.add_scalar('error', error, self.epoch)
         print('epoch {}\terror {:.3}\tbest_error {:.3}'.format(self.epoch, error, self.best_error))
 
@@ -203,6 +232,7 @@ class TrainModel(TemplateModel):
         state['best_error'] = self.best_error
         torch.save(state, fname)
         print('save model at {}'.format(fname))
+
 
 def start_train():
     train = TrainModel(args)
