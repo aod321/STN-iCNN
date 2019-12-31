@@ -1,7 +1,6 @@
 from template import TemplateModel
-from model import Stage2Model, SelectNet
-from icnnmodel import FaceModel as Stage1Model
-from preprocess import Resize, ToTensor, Normalize
+from model import SelectNet
+from preprocess import Resize, ToTensor, OrigPad
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 from torchvision import transforms
@@ -15,6 +14,7 @@ import uuid
 import numpy as np
 import os
 from dataset import HelenDataset
+from helper_funcs import calc_centroid
 
 uuid_8 = str(uuid.uuid1())[0:8]
 print(uuid_8)
@@ -28,31 +28,49 @@ parser.add_argument("--eval_per_epoch", default=1, type=int, help="eval_per_epoc
 args = parser.parse_args()
 print(args)
 
-img_root_dir = "/data1/yinzi/datas"
-part_root_dir = "/data1/yinzi/facial_parts"
-root_dir = {
-    'image': img_root_dir,
-    'parts': part_root_dir
-}
+# Dataset and Dataloader
+# Dataset Read_in Part
+root_dir = "/data1/yinzi/datas"
+parts_root_dir = "/home/yinzi/data3/recroped_parts"
+
 txt_file_names = {
     'train': "exemplars.txt",
-    'val': "tuning.txt"
+    'val': "tuning.txt",
+    'test': "testing.txt"
 }
 
+transforms_list = {
+    'train':
+        transforms.Compose([
+            ToTensor(),
+            Resize((128, 128)),
+            OrigPad()
+        ]),
+    'val':
+        transforms.Compose([
+            ToTensor(),
+            Resize((128, 128)),
+            OrigPad()
+        ]),
+    'test':
+        transforms.Compose([
+            ToTensor(),
+            Resize((128, 128)),
+            OrigPad()
+        ])
+}
+# DataLoader
 Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
-                           root_dir=root_dir['image'],
-                           parts_root_dir=root_dir['parts'],
-                           transform=transforms.Compose([
-                               Resize((64, 64))
-                               # Normalize()
-                           ])
+                           root_dir=root_dir,
+                           parts_root_dir=parts_root_dir,
+                           transform=transforms_list[x]
                            )
-           for x in ['train', 'val']
+           for x in ['train', 'val', 'test']
            }
 
 dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
                             shuffle=True, num_workers=4)
-              for x in ['train', 'val']
+              for x in ['train', 'val', 'test']
               }
 
 
@@ -175,6 +193,7 @@ class TrainModel(TemplateModel):
 
         self.save_state(os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
         self.writer.add_scalar('error_val%s' % uuid_8, error, self.epoch)
+
         # self.writer.add_image()
         print('epoch {}\terror {:.3}\tbest_error {:.3}'.format(self.epoch, error, self.best_error))
         torch.cuda.empty_cache()

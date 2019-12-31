@@ -263,10 +263,11 @@ class Stage2_RandomAffine(transforms.RandomAffine):
             PIL Image: Affine transformed image.
         """
         img, labels = sample['image'], sample['labels']
-        ret = self.get_params(self.degrees, self.translate, self.scale, self.shear, img.size)
-        img = [TF.affine(img[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
+        ret = [self.get_params(self.degrees, self.translate, self.scale, self.shear, img[r].size)
                for r in range(len(img))]
-        labels = [TF.affine(labels[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
+        img = [TF.affine(img[r], *ret[r], resample=self.resample, fillcolor=self.fillcolor)
+               for r in range(len(img))]
+        labels = [TF.affine(labels[r], *ret[r], resample=self.resample, fillcolor=self.fillcolor)
                   for r in range(len(labels))]
         sample = {'image': img, 'labels': labels}
         return sample

@@ -22,6 +22,7 @@ print(uuid)
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", default=16, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
+parser.add_argument("--pretrain", default=False, type=bool, help="True or False, Load pretrain parmeters")
 parser.add_argument("--optim", default='Adam', type=str, help="Adam or SGD")
 parser.add_argument("--lr0", default=0.0025, type=float, help="Learning rate for optimizer")
 parser.add_argument("--lr1", default=0.0025, type=float, help="Learning rate for optimizer")
@@ -56,22 +57,22 @@ transforms_list = {
             Stage2_ToTensor()
         ])
 }
-#Data Augmentation
-# stage2_augmentation = Stage2Augmentation(dataset=PartsDataset,
-#                                          txt_file=txt_file_names,
-#                                          root_dir=parts_root_dir
-#                                          )
-# enhaced_stage2_datasets = stage2_augmentation.get_dataset()
+# Data Augmentation
+stage2_augmentation = Stage2Augmentation(dataset=PartsDataset,
+                                         txt_file=txt_file_names,
+                                         root_dir=parts_root_dir
+                                         )
+enhaced_stage2_datasets = stage2_augmentation.get_dataset()
 
 # DataLoader
-Dataset = {x: PartsDataset(txt_file=txt_file_names[x],
-                           root_dir=parts_root_dir,
-                           transform=transforms_list[x]
-                           )
-           for x in ['train', 'val']
-           }
-
-dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
+# Dataset = {x: PartsDataset(txt_file=txt_file_names[x],
+#                            root_dir=parts_root_dir,
+#                            transform=transforms_list[x]
+#                            )
+#            for x in ['train', 'val']
+#            }
+#
+dataloader = {x: DataLoader(enhaced_stage2_datasets[x], batch_size=args.batch_size,
                             shuffle=True, num_workers=4)
               for x in ['train', 'val']
               }
@@ -94,6 +95,12 @@ class TrainModel(TemplateModel):
         self.device = torch.device("cuda:%d" % self.args.cuda if torch.cuda.is_available() else "cpu")
 
         self.model = Stage2Model().to(self.device)
+        if self.args.pretrain:
+            path = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/02a38440", "best.pth.tar")
+            self.load_state(path, map_location=self.device)
+            self.epoch = 0
+            self.step = 0
+
         lr = [self.args.lr0, self.args.lr1, self.args.lr2, self.args.lr3]
         if self.args.optim == 'Adam':
             self.optimizer = [optim.Adam(self.model.model[i].parameters(), lr[i])

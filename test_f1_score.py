@@ -17,6 +17,7 @@ model2 = Stage2Model().to(device)
 # load state
 # path = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/745d57da", "best.pth.tar")
 path = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/02a38440", "best.pth.tar")
+# path = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/b9d37dbc", "best.pth.tar")
 state = torch.load(path, map_location=device)
 model2.load_state_dict(state['model2'])
 

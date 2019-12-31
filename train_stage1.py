@@ -1,63 +1,82 @@
-from utils.template import TemplateModel
+from template import TemplateModel
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-from torch.utils.data import DataLoader
 import argparse
 import numpy as np
 from tensorboardX import SummaryWriter
-import tensorboardX as tb
-from datasets.dataset import Stage1Augmentation
 from icnnmodel import FaceModel as Stage1Model
 import uuid as uid
-import os 
+import os
+from torchvision import transforms
+from helper_funcs import F1Score, calc_centroid, affine_crop, affine_mapback
+from preprocess import ToPILImage, ToTensor, OrigPad, Resize
+from torch.utils.data import DataLoader
+from dataset import HelenDataset
+
+
 uuid = str(uid.uuid1())[0:8]
 print(uuid)
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", default=16, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
 parser.add_argument("--cuda", default=0, type=int, help="Choose GPU with cuda number")
+parser.add_argument("--mode", default='resize', type=str, help="orig, resize")
 parser.add_argument("--lr", default=0.0025, type=float, help="Learning rate for optimizer")
 parser.add_argument("--epochs", default=25, type=int, help="Number of epochs to train")
 parser.add_argument("--eval_per_epoch", default=1, type=int, help="eval_per_epoch ")
 args = parser.parse_args()
 print(args)
 
+# Dataset and Dataloader
 # Dataset Read_in Part
 root_dir = "/data1/yinzi/datas"
+parts_root_dir = "/home/yinzi/data3/recroped_parts"
 
 txt_file_names = {
     'train': "exemplars.txt",
-    'val': "tuning.txt"
+    'val': "tuning.txt",
+    'test': "testing.txt"
 }
 
 transforms_list = {
     'train':
         transforms.Compose([
-            Resize((128, 128)),
-            ToTensor()
+            ToTensor(),
+            # Resize((128, 128)),
+            OrigPad()
         ]),
     'val':
         transforms.Compose([
-            Resize((128, 128)),
-            ToTensor()
+            ToTensor(),
+            # Resize((128, 128)),
+            OrigPad()
+        ]),
+    'test':
+        transforms.Compose([
+            ToTensor(),
+            # Resize((128, 128)),
+            OrigPad()
         ])
 }
+
+
+
 # DataLoader
-stage1_augmentation = Stage1Augmentation(dataset=HelenDataset,
-                                         txt_file=txt_file_names,
-                                         root_dir=root_dir,
-                                         resize=(64, 64)
-                                         )
-enhaced_stage1_datasets = stage1_augmentation.get_dataset()
-stage1_dataloaders = {x: DataLoader(enhaced_stage1_datasets[x], batch_size=args.batch_size,
-                                    shuffle=True, num_workers=4)
-                      for x in ['train', 'val']}
+Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
+                           root_dir=root_dir,
+                           parts_root_dir=parts_root_dir,
+                           transform=transforms_list[x]
+                           )
+           for x in ['train', 'val', 'test']
+           }
 
-stage1_dataset_sizes = {x: len(enhaced_stage1_datasets[x]) for x in ['train', 'val']}
+dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
+                            shuffle=True, num_workers=4)
+              for x in ['train', 'val', 'test']
+              }
 
- 
+
 class TrainModel(TemplateModel):
 
     def __init__(self, argus=args):
@@ -68,7 +87,7 @@ class TrainModel(TemplateModel):
         self.epoch = 0
         self.best_error = float('Inf')
 
-        self.device = torch.device("cuda:%d" % cuda if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:%d" % self.args.cuda if torch.cuda.is_available() else "cpu")
 
         self.model = Stage1Model().to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), self.args.lr)
@@ -76,8 +95,8 @@ class TrainModel(TemplateModel):
         self.metric = nn.CrossEntropyLoss()
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=5, gamma=0.5)
 
-        self.train_loader = stage1_dataloaders['train']
-        self.eval_loader = stage1_dataloaders['val']
+        self.train_loader = dataloader['train']
+        self.eval_loader = dataloader['val']
 
         self.ckpt_dir = "checkpoints_A/%s" % uuid
         self.display_freq = args.display_freq
@@ -87,20 +106,28 @@ class TrainModel(TemplateModel):
 
     def train_loss(self, batch):
         x, y = batch['image'].float().to(self.device), batch['labels'].float().to(self.device)
-
+        orig = batch['orig'].to(self.device)
+        orig_label = batch['orig_label'].to(self.device)
         pred = self.model(x)
         loss = self.criterion(pred, y.argmax(dim=1, keepdim=False))
+        if self.args.mode == 'orig':
+            pred = self.model(orig)
+            loss = self.criterion(pred, orig_label.argmax(dim=1, keepdim=False))
 
         return loss, None
 
     def eval_error(self):
         loss_list = []
         for batch in self.eval_loader:
-            x, y = batch['image'].to(self.device), batch['labels'].to(self.device)
+            x, y = batch['image'].float().to(self.device), batch['labels'].float().to(self.device)
+            orig = batch['orig'].to(self.device)
+            orig_label = batch['orig_label'].to(self.device)
             pred = self.model(x)
-            error = self.metric(pred, y.argmax(dim=1, keepdim=False))
-            loss_list.append(error.item())
-
+            loss = self.criterion(pred, y.argmax(dim=1, keepdim=False))
+            if self.args.mode == 'orig':
+                pred = self.model(orig)
+                loss = self.criterion(pred, orig_label.argmax(dim=1, keepdim=False))
+            loss_list.append(loss.item())
         return np.mean(loss_list), None
 
     def eval(self):
@@ -150,15 +177,30 @@ class TrainModel(TemplateModel):
         state['epoch'] = self.epoch
         state['best_error'] = self.best_error
         torch.save(state, fname)
-        print('save model at {}'.format(fname)
+        print('save model at {}'.format(fname))
+
+    def load_state(self, fname, optim=True, map_location=None):
+        state = torch.load(fname, map_location=map_location)
+
+        if isinstance(self.model, torch.nn.DataParallel):
+            self.model.module.load_state_dict(state['model1'])
+        else:
+            self.model.load_state_dict(state['model1'])
+
+        if optim and 'optimizer' in state:
+            self.optimizer.load_state_dict(state['optimizer'])
+        self.step = state['step']
+        self.epoch = state['epoch']
+        self.best_error = state['best_error']
+        print('load model from {}'.format(fname))
 
 
 def start_train():
     train = TrainModel(args)
 
     for epoch in range(args.epochs):
-        train.scheduler.step()
         train.train()
+        train.scheduler.step(epoch)
         if (epoch + 1) % args.eval_per_epoch == 0:
             train.eval()
 

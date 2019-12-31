@@ -17,7 +17,7 @@ import math
 import cv2
 import matplotlib.pyplot as plt
 from preprocess import Resize, GaussianNoise, RandomAffine, Blurfilter, \
-    ToPILImage, ToTensor, Stage2_ToTensor, Stage2_RandomAffine, Stage2_GaussianNoise, Stage2ToPILImage
+    ToPILImage, ToTensor, Stage2_ToTensor, Stage2_RandomAffine, Stage2_GaussianNoise, Stage2ToPILImage, OrigPad
 
 
 class Stage1Augmentation(object):
@@ -102,32 +102,37 @@ class Stage1Augmentation(object):
             self.augmentation_name[0]: transforms.Compose([
                 ToPILImage(),
                 Resize(self.resize),
-                ToTensor()
+                ToTensor(),
+                OrigPad()
             ]),
             self.augmentation_name[1]: transforms.Compose([
                 ToPILImage(),
                 # Choose from tranforms_list randomly
                 transforms.RandomChoice(self.randomchoice['choice1']),
                 Resize(self.resize),
-                ToTensor()
+                ToTensor(),
+                OrigPad()
             ]),
             self.augmentation_name[2]: transforms.Compose([
                 ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice2']),
                 Resize(self.resize),
-                ToTensor()
+                ToTensor(),
+                OrigPad()
             ]),
             self.augmentation_name[3]: transforms.Compose([
                 ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice3']),
                 Resize(self.resize),
-                ToTensor()
+                ToTensor(),
+                OrigPad()
             ]),
             self.augmentation_name[4]: transforms.Compose([
                 ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice4']),
                 Resize(self.resize),
-                ToTensor()
+                ToTensor(),
+                OrigPad()
             ])
         }
 
@@ -158,7 +163,7 @@ class Stage1Augmentation(object):
 
 
 class Stage2Augmentation(object):
-    def __init__(self, dataset, txt_file, root_dir, resize):
+    def __init__(self, dataset, txt_file, root_dir, resize=None):
         self.augmentation_name = ['origin', 'choice1', 'choice2', 'choice3', 'choice4']
         self.randomchoice = None
         self.transforms = None
@@ -174,18 +179,18 @@ class Stage2Augmentation(object):
     def set_choice(self):
         choice = {
             # random_choice 1:  Blur, rotaion, Blur + rotation + scale_translate (random_order)
-            self.augmentation_name[1]: [Blurfilter(),
-                                        RandomAffine(degrees=15, translate=(0, 0),
-                                                     scale=(1, 1)),
-                                        transforms.RandomOrder([Stage2_GaussianNoise(),
-                                                                Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                                    scale=(0.9, 1.1))
-                                                                ]
-                                                               )
-                                        ],
+            self.augmentation_name[1]: [
+                Stage2_RandomAffine(degrees=15, translate=(0, 0),
+                                    scale=(1, 1)),
+                transforms.RandomOrder([Stage2_GaussianNoise(),
+                                        Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                            scale=(0.9, 1.1))
+                                        ]
+                                       )
+            ],
             # random_choice 2:  noise, crop, noise + crop + rotation_scale_translate (random_order)
-            self.augmentation_name[2]: [GaussianNoise(),
-                                        RandomAffine(degrees=30, translate=(0.3, 0.3), scale=(0.8, 1.5)),
+            self.augmentation_name[2]: [Stage2_GaussianNoise(),
+                                        Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3), scale=(0.8, 1.5)),
                                         transforms.RandomOrder([Stage2_GaussianNoise(),
                                                                 Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
                                                                                     scale=(0.8, 1.5))
@@ -213,8 +218,8 @@ class Stage2Augmentation(object):
                                                                ),
                                         transforms.RandomOrder([Stage2_RandomAffine(degrees=30, translate=None,
                                                                                     scale=(1, 1)),
-                                                               Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
-                                                                                   scale=(0.5, 1.5))
+                                                                Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
+                                                                                    scale=(0.5, 1.5))
                                                                 ]
                                                                )
                                         ],
