@@ -23,7 +23,7 @@ print(uuid)
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", default=16, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
-parser.add_argument("--new", default=0, type=int, help="Use new select_net")
+parser.add_argument("--new", default=1, type=int, help="Use new select_net")
 parser.add_argument("--pretrainA", default=0, type=int, help="Load pretrainA")
 parser.add_argument("--pretrainB", default=0, type=int, help="Load pretrainB")
 parser.add_argument("--lr", default=1e-4, type=float, help="Learning rate for optimizer1")
@@ -97,8 +97,8 @@ class TrainModel(TemplateModel):
         self.model = Stage1Model().to(self.device)
         if self.args.pretrainA:
             self.load_pretrained("model1")
-        self.model2 = Stage2Model().to(self.device)
-        self.load_pretrained("model2")
+        # self.model2 = Stage2Model().to(self.device)
+        # self.load_pretrained("model2")
         if self.args.new:
             self.select_net = SelectNet_resnet().to(self.device)
         else:
@@ -162,7 +162,7 @@ class TrainModel(TemplateModel):
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
             N, L, H, W = orig_label.shape
             stage1_pred = self.model(image)
-            assert stage1_pred.shape == (N, 9, 128, 128)
+            assert stage1_pred.shape == (N, 9, 64, 64)
 
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
             assert theta.shape == (N, 6, 2, 3)
@@ -259,7 +259,162 @@ class TrainModel(TemplateModel):
         path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/79648bf4", 'best.pth.tar')
         # path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/61ad8a38", 'best.pth.tar')
         # path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_B/9a95687c", 'best.pth.tar')
-        #checkpoints_B_new/0168b2ce resnet结构
+        # checkpoints_B_new/0168b2ce resnet结构
+        path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_new/0168b2ce", 'best.pth.tar')
+
+        path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
+        if model == 'model1':
+            fname = path_model1
+            state = torch.load(fname, map_location=self.device)
+            self.model.load_state_dict(state['model1'])
+            print("load from" + fname)
+        elif model == 'model2':
+            fname = path_model2
+            state = torch.load(fname, map_location=self.device)
+            self.model2.load_state_dict(state['model2'])
+            print("load from" + fname)
+        elif model == 'select_net':
+            fname = path_select
+            state = torch.load(fname, map_location=self.device)
+            self.select_net.load_state_dict(state['select_net'])
+            print("load from" + fname)
+
+
+class TrainModel_eval(TrainModel):
+
+    def __init__(self, argus=args):
+        super(TrainModel_eval, self).__init__(argus)
+        self.best_f1 = float('-Inf')
+
+    def train_loss(self, batch):
+        image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
+        orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
+        parts_mask_gt = batch['parts_mask_gt'].to(self.device)
+        N, L, H, W = orig_label.shape
+
+        stage1_pred = self.model(image)
+        assert stage1_pred.shape == (N, 9, 64, 64)
+
+        theta = self.select_net(F.softmax(stage1_pred, dim=1))
+        assert theta.shape == (N, 6, 2, 3)
+        assert orig_label.shape == (N, 9, 1024, 1024)
+        cens = torch.floor(calc_centroid(orig_label))
+
+        assert cens.shape == (N, 9, 2)
+        points = torch.floor(torch.cat([cens[:, 1:6],
+                                        cens[:, 6:9].mean(dim=1, keepdim=True)],
+                                       dim=1))
+        theta_label = torch.zeros((N, 6, 2, 3), device=self.device, requires_grad=False)
+        for i in range(6):
+            theta_label[:, i, 0, 0] = (81. - 1.) / (W - 1)
+            theta_label[:, i, 0, 2] = -1. + (2. * points[:, i, 1]) / (W - 1)
+            theta_label[:, i, 1, 1] = (81. - 1.) / (H - 1)
+            theta_label[:, i, 1, 2] = -1. + (2. * points[:, i, 0]) / (H - 1)
+        loss = []
+        loss.append(self.regress_loss(theta, theta_label))
+        parts, parts_label, _ = affine_crop(img=orig, label=orig_label, theta_in=theta, map_location=self.device)
+        for i in range(6):
+            loss.append(
+                self.criterion(parts_label[i], parts_mask_gt[:, i].long()))
+        loss = torch.stack(loss)
+        return loss
+
+    def eval_F1(self):
+        step = 0
+        f1_class = F1Score(self.device)
+        for batch in self.eval_loader:
+            step += 1
+            image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
+            orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
+            N, L, H, W = orig_label.shape
+            stage1_pred = self.model(image)
+            assert stage1_pred.shape == (N, 9, 64, 64)
+
+            theta = self.select_net(F.softmax(stage1_pred, dim=1))
+            assert theta.shape == (N, 6, 2, 3)
+            parts, parts_labels, _ = affine_crop(orig, orig_label, theta_in=theta, map_location=self.device)
+            final_parts_mask = affine_mapback(parts_labels, theta, self.device)
+            final_grid = torchvision.utils.make_grid(
+                final_parts_mask.argmax(dim=1, keepdim=True))
+            self.writer.add_image(
+                "final_parts_mask", final_grid[0], global_step=step, dataformats='HW')
+            f1_class.forward(final_parts_mask, orig_label.argmax(dim=1, keepdim=False))
+        _, F1_overall =f1_class.get_f1_score()
+
+        temp = []
+        for i in range(theta.shape[1]):
+            test = theta[:, i]
+            grid = F.affine_grid(theta=test, size=[N, 3, 81, 81], align_corners=True)
+            temp.append(F.grid_sample(input=orig, grid=grid, align_corners=True))
+        parts = torch.stack(temp, dim=1)
+        assert parts.shape == (N, 6, 3, 81, 81)
+        for i in range(6):
+            parts_grid = torchvision.utils.make_grid(
+                parts[:, i].detach().cpu())
+            self.writer.add_image('croped_parts_%s_%d' % (uuid, i), parts_grid, step)
+
+        return F1_overall
+
+    def train(self):
+        self.model.train()
+        # self.model2.train()
+        self.select_net.train()
+        self.epoch += 1
+        for batch in self.train_loader:
+            self.step += 1
+            self.optimizer.zero_grad()
+            # self.optimizer2.zero_grad()
+            self.optimizer_select.zero_grad()
+            loss = self.train_loss(batch)
+            loss.backward(torch.ones(7, device=self.device, requires_grad=False))
+            # self.optimizer2.step()
+            self.optimizer_select.step()
+            self.optimizer.step()
+
+            if self.step % self.display_freq == 0:
+                self.writer.add_scalar('loss_%s' % uuid, torch.mean(loss).item(), self.step)
+                print('epoch {}\tstep {}\tloss {:.3}'.format(self.epoch, self.step, torch.mean(loss).item()))
+
+    def eval(self):
+        self.model.eval()
+        # self.model2.eval()
+        self.select_net.eval()
+        f1_overall = self.eval_F1()
+        if f1_overall > self.best_f1:
+            self.best_f1 = f1_overall
+            self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
+        self.save_state(os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
+        self.writer.add_scalar('f1overall_%s' % uuid, f1_overall, self.epoch)
+        print('epoch {}\tf1overall_ {:.3}\tbest_f1 {:.3}'.format(self.epoch, f1_overall, self.best_error))
+
+    def save_state(self, fname, optim=True):
+        state = {}
+
+        if isinstance(self.model, torch.nn.DataParallel):
+            state['model1'] = self.model.module.state_dict()
+            # state['model2'] = self.model2.module.state_dict()
+            state['select_net'] = self.select_net.module.state_dict()
+        else:
+            state['model1'] = self.model.state_dict()
+            # state['model2'] = self.model2.state_dict()
+            state['select_net'] = self.select_net.state_dict()
+
+        if optim:
+            state['optimizer'] = self.optimizer.state_dict()
+            # state['optimizer2'] = self.optimizer2.state_dict()
+            state['optimizer_select'] = self.optimizer_select.state_dict()
+
+        state['step'] = self.step
+        state['epoch'] = self.epoch
+        state['best_error'] = self.best_error
+        torch.save(state, fname)
+        print('save model at {}'.format(fname))
+
+    def load_pretrained(self, model):
+        path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/79648bf4", 'best.pth.tar')
+        # path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/61ad8a38", 'best.pth.tar')
+        # path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_B/9a95687c", 'best.pth.tar')
+        # checkpoints_B_new/0168b2ce resnet结构
         path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_new/0168b2ce", 'best.pth.tar')
 
         path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
@@ -281,7 +436,7 @@ class TrainModel(TemplateModel):
 
 
 def start_train():
-    train = TrainModel(args)
+    train = TrainModel_eval(args)
 
     for epoch in range(args.epochs):
         train.train()
