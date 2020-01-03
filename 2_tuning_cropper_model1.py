@@ -365,14 +365,20 @@ class TrainModel_eval(TrainModel):
         # self.model2.eval()
         self.select_net.eval()
         f1_overall, error = self.eval_F1()
-        if f1_overall > self.best_f1:
-            self.best_f1 = f1_overall
+        # if f1_overall > self.best_f1:
+        #     self.best_f1 = f1_overall
+        #     self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
+        if error < self.best_error:
+            self.best_error = error
             self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
+
         self.save_state(os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
         self.writer.add_scalar('f1overall_%s' % uuid, f1_overall, self.epoch)
         self.writer.add_scalar('val_error_%s' % uuid, error, self.epoch)
-        print('epoch {}\terror {:.3}\tf1_overall {:.3}\tbest_f1 {:.3}'.format(self.epoch, error,
-                                                                              f1_overall, self.best_f1))
+        # print('epoch {}\terror {:.3}\tf1_overall {:.3}\tbest_f1 {:.3}'.format(self.epoch, error,
+        #                                                                       f1_overall, self.best_f1))
+        print('epoch {}\terror {:.3}\tf1_overall {:.3}\tbest_error {:.3}'.format(self.epoch, error,
+                                                                              f1_overall, self.best_error))
 
     def save_state(self, fname, optim=True):
         state = {}
