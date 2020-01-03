@@ -13,7 +13,7 @@ from helper_funcs import F1Score, calc_centroid, affine_crop, affine_mapback
 from preprocess import ToPILImage, ToTensor, OrigPad, Resize
 from torch.utils.data import DataLoader
 from dataset import HelenDataset
-
+from data_augmentation import Stage1Augmentation
 
 uuid = str(uid.uuid1())[0:8]
 print(uuid)
@@ -21,6 +21,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", default=16, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
 parser.add_argument("--cuda", default=0, type=int, help="Choose GPU with cuda number")
+parser.add_argument("--pretrain", default=0, type=int, help="Load pretrain")
+parser.add_argument("--datamore", default=0, type=int, help="Augmentation")
 parser.add_argument("--mode", default='resize', type=str, help="orig, resize")
 parser.add_argument("--lr", default=0.0025, type=float, help="Learning rate for optimizer")
 parser.add_argument("--epochs", default=25, type=int, help="Number of epochs to train")
@@ -32,7 +34,7 @@ print(args)
 # Dataset Read_in Part
 root_dir = "/data1/yinzi/datas"
 parts_root_dir = "/home/yinzi/data3/recroped_parts"
-
+pretrain_path = "/home/yinzi/data3/checkpoints_A/best.pth.tar"
 txt_file_names = {
     'train': "exemplars.txt",
     'val': "tuning.txt",
@@ -43,24 +45,31 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            # Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            # Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            # Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ])
 }
 
-
+Augment_Dataset = Stage1Augmentation(
+    dataset=HelenDataset,
+    txt_file=txt_file_names,
+    root_dir=root_dir,
+    parts_root_dir=parts_root_dir,
+    resize=(64, 64)
+)
+enhaced_stage1_datasets = Augment_Dataset.get_dataset()
 
 # DataLoader
 Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
@@ -71,10 +80,16 @@ Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
            for x in ['train', 'val', 'test']
            }
 
-dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
-                            shuffle=True, num_workers=4)
-              for x in ['train', 'val', 'test']
-              }
+if args.datamore:
+    dataloader = {x: DataLoader(enhaced_stage1_datasets[x], batch_size=args.batch_size,
+                                shuffle=True, num_workers=4)
+                  for x in ['train', 'val', 'test']
+                  }
+else:
+    dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
+                                shuffle=True, num_workers=4)
+                  for x in ['train', 'val', 'test']
+                  }
 
 
 class TrainModel(TemplateModel):
@@ -90,6 +105,11 @@ class TrainModel(TemplateModel):
         self.device = torch.device("cuda:%d" % self.args.cuda if torch.cuda.is_available() else "cpu")
 
         self.model = Stage1Model().to(self.device)
+        if self.args.pretrain:
+            self.load_state(pretrain_path, optim=False, map_location=self.device)
+            self.epoch = 0
+            self.step = 0
+            self.best_error = float('Inf')
         self.optimizer = optim.Adam(self.model.parameters(), self.args.lr)
         self.criterion = nn.CrossEntropyLoss()
         self.metric = nn.CrossEntropyLoss()

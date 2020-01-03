@@ -129,7 +129,6 @@ class TrainModel(TemplateModel):
     def train_loss(self, batch):
         image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
         orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
-        parts_mask_gt = batch['parts_mask_gt'].to(self.device)
         N, L, H, W = orig_label.shape
 
         stage1_pred = self.model(image)
@@ -286,42 +285,10 @@ class TrainModel_eval(TrainModel):
         super(TrainModel_eval, self).__init__(argus)
         self.best_f1 = float('-Inf')
 
-    def train_loss(self, batch):
-        image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
-        orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
-        parts_mask_gt = batch['parts_mask_gt'].to(self.device)
-        N, L, H, W = orig_label.shape
-
-        stage1_pred = self.model(image)
-        assert stage1_pred.shape == (N, 9, 64, 64)
-
-        theta = self.select_net(F.softmax(stage1_pred, dim=1))
-        assert theta.shape == (N, 6, 2, 3)
-        assert orig_label.shape == (N, 9, 1024, 1024)
-        cens = torch.floor(calc_centroid(orig_label))
-
-        assert cens.shape == (N, 9, 2)
-        points = torch.floor(torch.cat([cens[:, 1:6],
-                                        cens[:, 6:9].mean(dim=1, keepdim=True)],
-                                       dim=1))
-        theta_label = torch.zeros((N, 6, 2, 3), device=self.device, requires_grad=False)
-        for i in range(6):
-            theta_label[:, i, 0, 0] = (81. - 1.) / (W - 1)
-            theta_label[:, i, 0, 2] = -1. + (2. * points[:, i, 1]) / (W - 1)
-            theta_label[:, i, 1, 1] = (81. - 1.) / (H - 1)
-            theta_label[:, i, 1, 2] = -1. + (2. * points[:, i, 0]) / (H - 1)
-        loss = []
-        loss.append(self.regress_loss(theta, theta_label))
-        parts, parts_label, _ = affine_crop(img=orig, label=orig_label, theta_in=theta, map_location=self.device)
-        for i in range(6):
-            loss.append(
-                self.criterion(parts_label[i], parts_mask_gt[:, i].long()))
-        loss = torch.stack(loss)
-        return loss
-
     def eval_F1(self):
         step = 0
         f1_class = F1Score(self.device)
+        loss_list = []
         for batch in self.eval_loader:
             step += 1
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
@@ -332,6 +299,24 @@ class TrainModel_eval(TrainModel):
 
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
             assert theta.shape == (N, 6, 2, 3)
+            assert orig_label.shape == (N, 9, 1024, 1024)
+            cens = torch.floor(calc_centroid(orig_label))
+
+            assert cens.shape == (N, 9, 2)
+            points = torch.floor(torch.cat([cens[:, 1:6],
+                                            cens[:, 6:9].mean(dim=1, keepdim=True)],
+                                           dim=1))
+            theta_label = torch.zeros((N, 6, 2, 3), device=self.device, requires_grad=False)
+            for i in range(6):
+                theta_label[:, i, 0, 0] = (81. - 1.) / (W - 1)
+                theta_label[:, i, 0, 2] = -1. + (2. * points[:, i, 1]) / (W - 1)
+                theta_label[:, i, 1, 1] = (81. - 1.) / (H - 1)
+                theta_label[:, i, 1, 2] = -1. + (2. * points[:, i, 0]) / (H - 1)
+
+            loss = self.regress_loss(theta, theta_label)
+            loss_list.append(loss.item())
+
+
             parts, parts_labels, _ = affine_crop(orig, orig_label, theta_in=theta, map_location=self.device)
             final_parts_mask = affine_mapback(parts_labels, theta, self.device)
             final_grid = torchvision.utils.make_grid(
@@ -353,7 +338,7 @@ class TrainModel_eval(TrainModel):
                 parts[:, i].detach().cpu())
             self.writer.add_image('croped_parts_%s_%d' % (uuid, i), parts_grid, step)
 
-        return F1_overall
+        return F1_overall, np.mean(loss_list)
 
     def train(self):
         self.model.train()
@@ -366,7 +351,7 @@ class TrainModel_eval(TrainModel):
             # self.optimizer2.zero_grad()
             self.optimizer_select.zero_grad()
             loss = self.train_loss(batch)
-            loss.backward(torch.ones(7, device=self.device, requires_grad=False))
+            loss.backward()
             # self.optimizer2.step()
             self.optimizer_select.step()
             self.optimizer.step()
@@ -379,13 +364,15 @@ class TrainModel_eval(TrainModel):
         self.model.eval()
         # self.model2.eval()
         self.select_net.eval()
-        f1_overall = self.eval_F1()
+        f1_overall, error = self.eval_F1()
         if f1_overall > self.best_f1:
             self.best_f1 = f1_overall
             self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
         self.save_state(os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
         self.writer.add_scalar('f1overall_%s' % uuid, f1_overall, self.epoch)
-        print('epoch {}\tf1overall_ {:.3}\tbest_f1 {:.3}'.format(self.epoch, f1_overall, self.best_error))
+        self.writer.add_scalar('val_error_%s' % uuid, error, self.epoch)
+        print('epoch {}\terror {:.3}\tf1_overall {:.3}\tbest_f1 {:.3}'.format(self.epoch, error,
+                                                                              f1_overall, self.best_f1))
 
     def save_state(self, fname, optim=True):
         state = {}
@@ -414,6 +401,7 @@ class TrainModel_eval(TrainModel):
         path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/79648bf4", 'best.pth.tar')
         # path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/61ad8a38", 'best.pth.tar')
         # path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_B/9a95687c", 'best.pth.tar')
+
         # checkpoints_B_new/0168b2ce resnet结构
         path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_new/0168b2ce", 'best.pth.tar')
 
