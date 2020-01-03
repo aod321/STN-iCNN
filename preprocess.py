@@ -25,17 +25,18 @@ class Resize(transforms.Resize):
 
         """
         image, labels = sample['image'], sample['labels']
-        parts, parts_mask = sample['parts_gt'], sample['parts_gt']
+        parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
         resized_image = F.interpolate(image.unsqueeze(0), self.size, mode='bilinear', align_corners=True).squeeze(0)
 
         resized_labels = torch.cat(
-            [F.interpolate(labels[r:r+1].unsqueeze(0), self.size, mode='nearest').squeeze(0)
+            [F.interpolate(labels[r:r + 1].unsqueeze(0), self.size, mode='nearest').squeeze(0)
              for r in range(len(labels))
              ], dim=0)
-        assert resized_labels.shape == (9, 128, 128)
+        assert resized_labels.shape == (9, 64, 64)
 
         sample = {'image': resized_image, 'labels': resized_labels,
                   'orig': sample['orig'], 'orig_label': sample['orig_label'],
+                  'orig_size': sample['orig_size'],
                   'parts_gt': parts, 'parts_mask_gt': parts_mask}
 
         return sample
@@ -67,13 +68,13 @@ class ToTensor(transforms.ToTensor):
                              for r in range(len(parts))])
 
         parts_mask = torch.cat([TF.to_tensor(parts_mask[r])
-                                  for r in range(len(parts_mask))])
+                                for r in range(len(parts_mask))])
 
         assert parts.shape == (6, 3, 81, 81)
         assert parts_mask.shape == (6, 81, 81)
 
         sample = {'image': TF.to_tensor(image), 'labels': labels, 'orig': sample['orig'],
-                  'orig_label': sample['orig_label'],
+                  'orig_label': sample['orig_label'], 'orig_size': sample['orig_size'],
                   'parts_gt': parts, 'parts_mask_gt': parts_mask}
 
         return sample
@@ -120,20 +121,27 @@ class OrigPad(object):
 
         """
         image, labels = sample['image'], sample['labels']
-        parts, parts_mask = sample['parts_gt'], sample['parts_gt']
+        parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
         orig_label = sample['orig_label']
-        orig = TF.to_pil_image(sample['orig'])
+        orig = sample['orig']
+        if type(orig) is not Image.Image:
+            orig = TF.to_pil_image(sample['orig'])
+
+        if type(orig_label[0]) is not Image.Image:
+            orig_label = [TF.to_pil_image(orig_label[r])
+                          for r in range(len(orig_label))]
 
         desired_size = 1024
         delta_width = desired_size - orig.size[0]
         delta_height = desired_size - orig.size[1]
         pad_width = delta_width // 2
         pad_height = delta_height // 2
+        orig_size = np.array([orig.size[0], orig.size[1]])
         padding = np.array([pad_width, pad_height, delta_width - pad_width, delta_height - pad_height])
 
         pad_orig = TF.to_tensor(TF.pad(orig, tuple(padding)))
 
-        orig_label = [TF.to_tensor(TF.pad(TF.to_pil_image(orig_label[r]), tuple(padding)))
+        orig_label = [TF.to_tensor(TF.pad(orig_label[r], tuple(padding)))
                       for r in range(len(orig_label))
                       ]
         orig_label = torch.cat(orig_label, dim=0).float()
@@ -143,6 +151,7 @@ class OrigPad(object):
         assert orig_label.shape == (9, 1024, 1024)
 
         sample = {'image': image, 'labels': labels, 'orig': pad_orig, 'orig_label': orig_label,
+                  'orig_size': orig_size, 'padding': padding,
                   'parts_gt': parts, 'parts_mask_gt': parts_mask}
 
         return sample
@@ -163,7 +172,8 @@ class RandomAffine(transforms.RandomAffine):
         labels = [TF.affine(labels[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
                   for r in range(len(labels))]
         sample = {'image': img, 'labels': labels, 'orig': sample['orig'], 'orig_label': sample['orig_label'],
-                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_gt']}
+                  'orig_size': sample['orig_size'],
+                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
         return sample
 
 
@@ -181,7 +191,7 @@ class ToPILImage(object):
                     dict of sample(PIL,List of PIL): Converted image and Labels.
         """
         image, labels = sample['image'], sample['labels']
-        parts, parts_mask = sample['parts_gt'], sample['parts_gt']
+        parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
         orig_label = sample['orig_label']
         orig = TF.to_pil_image(sample['orig'])
 
@@ -196,7 +206,8 @@ class ToPILImage(object):
                   for i in range(labels.shape[0])]
 
         sample = {'image': image, 'labels': labels, 'orig': orig, 'orig_label': orig_label,
-                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_gt']}
+                  'orig_size': sample['orig_size'],
+                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
         return sample
 
 
@@ -233,8 +244,11 @@ class GaussianNoise(object):
         img = random_noise(img)
         img = TF.to_pil_image(np.uint8(255 * img))
 
+        orig = sample['orig']
+
         sample = {'image': img, 'labels': sample['labels'], 'orig': sample['orig'],
                   'orig_label': sample['orig_label'], 'parts_gt': sample['parts_gt'],
+                  'orig_size': sample['orig_size'],
                   'parts_mask_gt': sample['parts_mask_gt']
                   }
         return sample
@@ -247,6 +261,7 @@ class Blurfilter(object):
         img = img.filter(ImageFilter.BLUR)
         sample = {'image': img, 'labels': sample['labels'], 'orig': sample['orig'],
                   'orig_label': sample['orig_label'], 'parts_gt': sample['parts_gt'],
+                  'orig_size': sample['orig_size'],
                   'parts_mask_gt': sample['parts_mask_gt']
                   }
 

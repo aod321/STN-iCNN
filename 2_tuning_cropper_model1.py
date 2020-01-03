@@ -298,6 +298,9 @@ class TrainModel_eval(TrainModel):
             assert stage1_pred.shape == (N, 9, 64, 64)
 
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
+            test_pred = F.softmax(stage1_pred, dim=1).argmax(dim=1, keepdim=True)
+            test_pred_grid = torchvision.utils.make_grid(test_pred)
+            self.writer.add_image("stage1_pred_%s" % uuid, test_pred_grid[0], self.step, dataformats='HW')
             assert theta.shape == (N, 6, 2, 3)
             assert orig_label.shape == (N, 9, 1024, 1024)
             cens = torch.floor(calc_centroid(orig_label))

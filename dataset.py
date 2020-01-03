@@ -49,7 +49,8 @@ class HelenDataset(Dataset):
         labels = np.uint8(np.concatenate(([bg.clip(0, 255)], labels[2:10]), axis=0))
 
         parts, parts_mask = self.getparts(idx)
-        sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels,
+        orig_size = image.shape
+        sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels, 'orig_size': orig_size,
                   'parts_gt': parts, 'parts_mask_gt': parts_mask}
 
         if self.transform:
@@ -59,7 +60,7 @@ class HelenDataset(Dataset):
 
     def getparts(self, idx):
         name = self.name_list[idx, 1].strip()
-        name_list = ['eye1', 'eye2', 'eyebrow1', 'eyebrow2', 'nose', 'mouth']
+        name_list = ['eyebrow1', 'eyebrow2', 'eye1', 'eye2', 'nose', 'mouth']
         path = {x: os.path.join(self.parts_root_dir, x, self.mode)
                 for x in name_list}
         parts_path = {x: os.path.join(path[x], name + "_image.png")

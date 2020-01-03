@@ -142,26 +142,40 @@ class F1Score(torch.nn.CrossEntropyLoss):
         print("{}:{}\t".format("overall", self.F1_overall))
         return self.F1, self.F1_overall
 
+    def get_f1_score(self):
+        # print("All F1_scores:")
+        for x in self.F1_name_list:
+            self.recall_overall_list[x] = np.array(self.recall_overall_list[x]).mean()
+            self.precision_overall_list[x] = np.array(self.precision_overall_list[x]).mean()
+            self.F1[x] = np.array(self.F1_list[x]).mean()
+        for x in self.F1_name_list:
+            self.recall_overall += self.recall_overall_list[x]
+            self.precision_overall += self.precision_overall_list[x]
+        self.recall_overall /= len(self.F1_name_list)
+        self.precision_overall /= len(self.F1_name_list)
+        self.F1_overall = (2 * self.precision_overall * self.recall_overall) / \
+                          (self.precision_overall + self.recall_overall)
+        return self.F1, self.F1_overall
+
 
 def affine_crop(img, label, points=None, theta_in=None, map_location=None):
     n, l, h, w = img.shape
-    img_in = img.clone()
-    label_in = label.clone()
-    assert (points or theta_in)
-    assert (points and theta_in) is None
-    if points:
+    img_in = img.to(map_location)
+    label_in = label.to(map_location)
+    if points is not None:
         theta = torch.zeros((n, 6, 2, 3), dtype=torch.float32, device=map_location, requires_grad=False)
-        points_in = points.clone()
+        points_in = points.to(map_location)
         points_in = torch.cat([points_in[:, 1:6],
                                points_in[:, 6:9].mean(dim=1, keepdim=True)],
                               dim=1)
+        points_in = torch.floor(points_in)
         assert points_in.shape == (n, 6, 2)
         for i in range(6):
             theta[:, i, 0, 0] = (81 - 1) / (w - 1)
             theta[:, i, 0, 2] = -1 + (2 * points_in[:, i, 1]) / (w - 1)
             theta[:, i, 1, 1] = (81 - 1) / (h - 1)
             theta[:, i, 1, 2] = -1 + (2 * points_in[:, i, 0]) / (h - 1)
-    elif theta_in:
+    elif theta_in is not None:
         theta = theta_in
     assert theta.shape == (n, 6, 2, 3)
 
@@ -180,7 +194,7 @@ def affine_crop(img, label, points=None, theta_in=None, map_location=None):
         temp.append(F.grid_sample(input=label_in[:, i:i + 1], grid=grid,
                                   mode='nearest', padding_mode='zeros', align_corners=True))
     for i in range(5):
-        bg = torch.tensor(1.) - temp[i]
+        bg = torch.tensor(1., device=map_location, requires_grad=False) - temp[i]
         labels_sample.append(torch.cat([bg, temp[i]], dim=1))
 
     temp = []
@@ -191,7 +205,8 @@ def affine_crop(img, label, points=None, theta_in=None, map_location=None):
                                   mode='nearest', padding_mode='zeros'))
     temp = torch.cat(temp, dim=1)
     assert temp.shape == (n, 3, 81, 81)
-    bg = torch.tensor(1.) - temp.sum(dim=1, keepdim=True)
+    bg = torch.tensor(1., device=map_location, requires_grad=False) - temp.sum(dim=1, keepdim=True)
+
     labels_sample.append(torch.cat([bg, temp], dim=1))
     """
     Shape of Parts

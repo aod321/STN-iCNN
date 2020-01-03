@@ -92,7 +92,7 @@ class TrainModel(TemplateModel):
             "cuda:%d" % args.cuda if torch.cuda.is_available() else "cpu")
 
         self.model = Stage1Model().to(self.device)
-        self.load_pretrained("model1")
+        # self.load_pretrained("model1")
         self.model2 = Stage2Model().to(self.device)
         self.load_pretrained("model2")
         self.select_net = SelectNet().to(self.device)
@@ -124,7 +124,7 @@ class TrainModel(TemplateModel):
     def train_loss(self, batch):
         image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
         orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
-        parts_mask = batch['parts_label'].to(self.device)
+        parts_mask = batch['parts_mask_gt'].to(self.device)
 
         N, L, H, W = orig_label.shape
         assert label.shape == (N, 9, 128, 128)
@@ -151,7 +151,7 @@ class TrainModel(TemplateModel):
         for batch in self.eval_loader:
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
-            parts_mask = batch['parts_label'].to(self.device)
+            parts_mask = batch['parts_mask_gt'].to(self.device)
 
             N, L, H, W = orig_label.shape
             assert label.shape == (N, 9, 128, 128)
@@ -184,7 +184,6 @@ class TrainModel(TemplateModel):
             self.optimizer2.zero_grad()
             self.optimizer_select.zero_grad()
             loss = self.train_loss(batch)
-            assert loss.shape == 6
             # [1,1,1,1,1,1] weight for 6 parts loss
             loss.backward(torch.ones(6, device=self.device, requires_grad=False))
             self.optimizer2.step()
@@ -192,7 +191,7 @@ class TrainModel(TemplateModel):
             # self.optimizer.step()
 
             if self.step % self.display_freq == 0:
-                self.writer.add_scalar('loss', loss.item(), self.step)
+                self.writer.add_scalar('loss_%s' % uuid, torch.mean(loss).item(), self.step)
                 print('epoch {}\tstep {}\tloss {:.3}'.format(
                     self.epoch, self.step, torch.mean(loss).item()))
 
@@ -206,7 +205,7 @@ class TrainModel(TemplateModel):
             self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
         self.save_state(
             os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
-        self.writer.add_scalar('error', error, self.epoch)
+        self.writer.add_scalar('error_%s' % uuid, error, self.epoch)
         print('epoch {}\terror {:.3}\tbest_error {:.3}'.format(
             self.epoch, error, self.best_error))
 
@@ -239,15 +238,15 @@ class TrainModel(TemplateModel):
         if model == 'model1':
             fname = "a"
             state = torch.load(fname, map_location=self.device)
-            self.model.load_state_dict(state['model1'])
+            self.model1.load_state_dict(state['model1'])
         elif model == 'model2':
-            fname = "b"
+            fname = "/home/yinzi/data4/new_train/checkpoints_C/02a38440/best.pth.tar"
             state = torch.load(fname, map_location=self.device)
-            self.model.load_state_dict(state['model2'])
+            self.model2.load_state_dict(state['model2'])
         elif model == 'select_net':
-            fname = "c"
+            fname = "/home/yinzi/data4/new_train/checkpoints_AB/6b4324c6/best.pth.tar"
             state = torch.load(fname, map_location=self.device)
-            self.model.load_state_dict(state['select_net'])
+            self.select_net.load_state_dict(state['select_net'])
 
 
 def start_train():

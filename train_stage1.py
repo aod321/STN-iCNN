@@ -125,28 +125,30 @@ class TrainModel(TemplateModel):
         self.check_init()
 
     def train_loss(self, batch):
-        x, y = batch['image'].float().to(self.device), batch['labels'].float().to(self.device)
-        orig = batch['orig'].to(self.device)
-        orig_label = batch['orig_label'].to(self.device)
-        pred = self.model(x)
-        loss = self.criterion(pred, y.argmax(dim=1, keepdim=False))
         if self.args.mode == 'orig':
+            orig = batch['orig'].to(self.device)
+            orig_label = batch['orig_label'].to(self.device)
             pred = self.model(orig)
             loss = self.criterion(pred, orig_label.argmax(dim=1, keepdim=False))
+        else:
+            x, y = batch['image'].float().to(self.device), batch['labels'].float().to(self.device)
+            pred = self.model(x)
+            loss = self.criterion(pred, y.argmax(dim=1, keepdim=False))
 
         return loss, None
 
     def eval_error(self):
         loss_list = []
         for batch in self.eval_loader:
-            x, y = batch['image'].float().to(self.device), batch['labels'].float().to(self.device)
-            orig = batch['orig'].to(self.device)
-            orig_label = batch['orig_label'].to(self.device)
-            pred = self.model(x)
-            loss = self.criterion(pred, y.argmax(dim=1, keepdim=False))
             if self.args.mode == 'orig':
+                orig = batch['orig'].to(self.device)
+                orig_label = batch['orig_label'].to(self.device)
                 pred = self.model(orig)
                 loss = self.criterion(pred, orig_label.argmax(dim=1, keepdim=False))
+            else:
+                x, y = batch['image'].float().to(self.device), batch['labels'].float().to(self.device)
+                pred = self.model(x)
+                loss = self.criterion(pred, y.argmax(dim=1, keepdim=False))
             loss_list.append(loss.item())
         return np.mean(loss_list), None
 
