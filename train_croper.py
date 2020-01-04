@@ -1,5 +1,5 @@
 from template import TemplateModel
-from model import SelectNet
+from model import SelectNet, SelectNet_resnet
 from preprocess import Resize, ToTensor, OrigPad
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
@@ -21,6 +21,7 @@ print(uuid_8)
 parser = argparse.ArgumentParser()
 parser.add_argument("--cuda", default=0, type=int, help="Which GPU to train.")
 parser.add_argument("--batch_size", default=16, type=int, help="Batch size to use during training.")
+parser.add_argument("--select_net", default=0, type=int, help="0 custom, 1 resnet-18")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
 parser.add_argument("--lr", default=0.0025, type=float, help="Learning rate for optimizer")
 parser.add_argument("--epochs", default=50, type=int, help="Number of epochs to train")
@@ -86,15 +87,21 @@ class TrainModel(TemplateModel):
         self.best_error = float('Inf')
 
         self.device = torch.device("cuda:%d" % args.cuda if torch.cuda.is_available() else "cpu")
-
-        self.model = SelectNet().to(self.device)
+        if self.args.select_net == 0:
+            self.model = SelectNet().to(self.device)
+        elif self.args.select_net ==1:
+            self.model = SelectNet_resnet().to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), self.args.lr)
         self.criterion = nn.SmoothL1Loss()
         self.metric =  nn.SmoothL1Loss()
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=5, gamma=0.1)
         self.train_loader = dataloader['train']
         self.eval_loader = dataloader['val']
-        self.ckpt_dir = "checkpoints_B/%s" % uuid_8
+        if self.args.select_net == 0:
+            self.ckpt_dir = "checkpoints_B/%s" % uuid_8
+        elif self.args.select_net == 1:
+            self.ckpt_dir = "checkpoints_B_res/%s" % uuid_8
+
         self.display_freq = args.display_freq
         # call it to check all members have been intiated
         self.check_init()
