@@ -17,19 +17,20 @@ model1 = FaceModel().to(device)
 model2 = Stage2Model().to(device)
 # load state
 
-path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/dd0a0bf4", "best.pth.tar")
+# path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", "best.pth.tar")
+path_model1 = os.path.join("/home/yinzi/data3/vimg18/icnn-face/checkpoints", "best.pth.tar")
 path_model2_all = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/79f85a02", "best.pth.tar")
-path_model2_eyebrows = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
+path_model2_396 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
 
 state1 = torch.load(path_model1, map_location=device)
 state2_all = torch.load(path_model2_all, map_location=device)
-state2_brows = torch.load(path_model2_eyebrows, map_location=device)
+state2_396 = torch.load(path_model2_396, map_location=device)
 
-match_brows = {k: v for k, v in state2_brows['model2'].items() if k.startswith('model.0')}
-state2_all['model2'].update(match_brows)
+# match_brows = {k: v for k, v in state2_brows['model2'].items() if k.startswith('model.0')}
+# state2_all['model2'].update(match_brows)
 
-model1.load_state_dict(state1['model1'])
-model2.load_state_dict(state2_all['model2'])
+model1.load_state_dict(state1['model'])
+model2.load_state_dict(state2_396['model2'])
 
 # Dataset and Dataloader
 # Dataset Read_in Part

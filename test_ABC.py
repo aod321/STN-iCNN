@@ -1,4 +1,4 @@
-from model import Stage2Model, FaceModel, SelectNet_resnet
+from model import Stage2Model, FaceModel, SelectNet_resnet, SelectNet
 from tensorboardX import SummaryWriter
 from dataset import HelenDataset
 from torchvision import transforms
@@ -14,7 +14,7 @@ writer = SummaryWriter('log')
 device = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
 model1 = FaceModel().to(device)
 model2 = Stage2Model().to(device)
-select_model = SelectNet.to(device)
+select_model = SelectNet().to(device)
 # load state
 #save model at checkpoints_ABC/00ca488c/25.pth.tar
 # epoch 25        error 0.0605    best_error 0.0589
@@ -23,7 +23,7 @@ select_model = SelectNet.to(device)
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/00ca488c", "best.pth.tar")
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/c8c68e16", "best.pth.tar")
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/ea3c3972", "best.pth.tar")
-pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/09d01660", "best.pth.tar")
+pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/a8881520", "best.pth.tar")
 
 pathAB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", "best.pth.tar")
 pathB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", 'best.pth.tar')
