@@ -85,7 +85,7 @@ class TrainModel(TemplateModel):
     def __init__(self, argus=args):
         super(TrainModel, self).__init__()
         self.args = argus
-        self.writer = SummaryWriter('log')
+        self.writer = SummaryWriter('log_new')
         self.step = 0
         self.epoch = 0
         self.best_error = float('Inf')
@@ -100,7 +100,7 @@ class TrainModel(TemplateModel):
         elif self.args.select_net == 0:
             self.select_net = SelectNet().to(self.device)
         if self.args.pretrainB:
-            self.load_pretrained("select_net")
+            self.load_pretrained("select_net", self.args.select_net)
         self.optimizer = optim.Adam(self.model.parameters(), self.args.lr)
         self.optimizer_select = optim.Adam(self.select_net.parameters(), self.args.lr_s)
 
@@ -112,7 +112,7 @@ class TrainModel(TemplateModel):
 
         self.train_loader = dataloader['train']
         self.eval_loader = dataloader['val']
-        if self.args.select_net == '1':
+        if self.args.select_net == 1:
             self.ckpt_dir = "checkpoints_AB_res/%s" % uuid
         else:
             self.ckpt_dir = "checkpoints_AB_custom/%s" % uuid
@@ -160,15 +160,21 @@ class TrainModel(TemplateModel):
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
             N, L, H, W = orig_label.shape
+            # Get Stage1 mask predict
             stage1_pred = F.softmax(self.model(image), dim=1)
             assert stage1_pred.shape == (N, 9, 128, 128)
+
+            # imshow stage1 mask predict
             stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
             self.writer.add_image("stage1 predict%s" % uuid, stage1_pred_grid, step)
-            theta = self.select_net(stage1_pred, dim=1)
+
+            # Stage1Mask to Affine Theta
+            theta = self.select_net(stage1_pred)
             assert theta.shape == (N, 6, 2, 3)
+
+            # Calculate Affine theta ground truth
             assert orig_label.shape == (N, 9, 1024, 1024)
             cens = torch.floor(calc_centroid(orig_label))
-
             assert cens.shape == (N, 9, 2)
             points = torch.floor(torch.cat([cens[:, 1:6],
                                             cens[:, 6:9].mean(dim=1, keepdim=True)],
@@ -180,9 +186,11 @@ class TrainModel(TemplateModel):
                 theta_label[:, i, 1, 1] = (81. - 1.) / (H - 1)
                 theta_label[:, i, 1, 2] = -1. + (2. * points[:, i, 0]) / (H - 1)
 
+            # calc regression loss
             loss = self.regress_loss(theta, theta_label)
             loss_list.append(loss.item())
 
+        # imshow cropped parts
         temp = []
         for i in range(theta.shape[1]):
             test = theta[:, i]
@@ -193,8 +201,7 @@ class TrainModel(TemplateModel):
         for i in range(6):
             parts_grid = torchvision.utils.make_grid(
                 parts[:, i].detach().cpu())
-            self.writer.add_image('croped_parts_%s_%d' % (uuid, i), parts_grid, step)
-
+            self.writer.add_image('croped_parts_%s_%d' % (uuid, i), parts_grid, self.step)
         return np.mean(loss_list)
 
     def train(self):
@@ -249,12 +256,12 @@ class TrainModel(TemplateModel):
         print('save model at {}'.format(fname))
 
     def load_pretrained(self, model, mode=None):
-        path_modelA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/8f4afb96", 'best.pth.tar')
+        path_modelA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/88736bbe", 'best.pth.tar')
         if mode == 0:
             path_modelB_select_net = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_selectnet/cab2d814",
                                                   'best.pth.tar')
         elif mode == 1:
-            path_modelB_select_net = os.path.join("/home/yinzi/data4/new_train/checkpoints_resnet/2a8e078e",
+            path_modelB_select_net = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_resnet/2a8e078e",
                                                   'best.pth.tar')
 
         if model == 'model1':
@@ -366,7 +373,7 @@ class TrainModel_eval(TrainModel):
 
 
 def start_train():
-    train = TrainModel_eval(args)
+    train = TrainModel(args)
 
     for epoch in range(args.epochs):
         train.train()

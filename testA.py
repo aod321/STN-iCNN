@@ -10,10 +10,13 @@ import torchvision
 import torch
 import os
 
+import uuid as uid
+uuid = str(uid.uuid1())[0:8]
+
 writer = SummaryWriter('log')
 device = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
 model1 = FaceModel().to(device)
-pathA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/dd0a0bf4", "best.pth.tar")
+pathA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/456b1d1c", "best.pth.tar")
 stateA = torch.load(pathA, map_location=device)
 model1.load_state_dict(stateA['model1'])
 
@@ -76,5 +79,5 @@ for batch in dataloader['test']:
     assert stage1_pred.shape == (N, 9, 128, 128)
 
     stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
-    writer.add_image("stage1 predict%s" % "newtestA", stage1_pred_grid, step)
+    writer.add_image("stage1 predict%s" % "testA_%s" % uuid, stage1_pred_grid, step)
 

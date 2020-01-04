@@ -14,7 +14,7 @@ from helper_funcs import F1Score, calc_centroid, affine_crop, affine_mapback
 from preprocess import ToPILImage, ToTensor, OrigPad, Resize
 from torch.utils.data import DataLoader
 from dataset import HelenDataset
-from model import Stage2Model, SelectNet
+from model import Stage2Model, SelectNet, SelectNet_resnet
 from helper_funcs import affine_crop, F1Score, affine_mapback
 import torchvision
 
@@ -23,6 +23,10 @@ print(uuid)
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", default=16, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
+parser.add_argument("--select_net", default=1, type=int, help="Choose B structure, 0: custom 16 layer, 1: Res-18")
+parser.add_argument("--pretrainA", default=1, type=int, help="Load ModelA pretrain")
+parser.add_argument("--pretrainB", default=1, type=int, help="Load ModelB pretrain")
+parser.add_argument("--pretrainC", default=0, type=int, help="Load ModelC pretrain")
 parser.add_argument("--lr", default=1e-3, type=float, help="Learning rate for optimizer1")
 parser.add_argument("--lr2", default=1e-3, type=float, help="Learning rate for optimizer2")
 parser.add_argument("--lr_s", default=1e-3, type=float, help="Learning rate for optimizer_select")
@@ -92,11 +96,21 @@ class TrainModel(TemplateModel):
         self.device = torch.device("cuda:%d" % args.cuda if torch.cuda.is_available() else "cpu")
 
         self.model = Stage1Model().to(self.device)
-        self.load_pretrained("model1")
+        if self.args.pretrainA:
+            self.load_pretrained("model1")
+
+        if self.args.select_net == 0:
+            self.select_net = SelectNet().to(self.device)
+        elif self.args.select_net == 1:
+            self.select_net = SelectNet_resnet().to(self.device)
+
+        if self.args.pretrainB:
+            self.load_pretrained("select_net", mode = self.args.select_net)
+
         self.model2 = Stage2Model().to(self.device)
-        # self.load_pretrained("model2")
-        self.select_net = SelectNet().to(self.device)
-        self.load_pretrained("select_net")
+        if self.args.pretrainC:
+            self.load_pretrained("model2")
+
         self.optimizer = optim.Adam(self.model.parameters(), self.args.lr)
         self.optimizer2 = optim.Adam(self.model2.parameters(), self.args.lr2)
         self.optimizer_select = optim.Adam(self.select_net.parameters(), self.args.lr_s)
@@ -124,24 +138,29 @@ class TrainModel(TemplateModel):
         N, L, H, W = orig_label.shape
 
         assert parts_mask_gt.shape == (N, 6, 81, 81)
-
-        stage1_pred = self.model(image)
+        # Get Stage1 coarse mask
+        stage1_pred = F.softmax(self.model(image), dim=1)
         assert stage1_pred.shape == (N, 9, 128, 128)
 
-        theta = self.select_net(F.softmax(stage1_pred, dim=1))
+        # Mask2Theta
+        theta = self.select_net(stage1_pred)
         assert theta.shape == (N, 6, 2, 3)
 
+        # Affine_cropper
         parts, parts_label, _ = affine_crop(img=orig, label=orig_label, theta_in=theta, map_location=self.device)
         assert parts.shape == (N, 6, 3, 81, 81)
 
+        # Make sure the backward grad stream unblocked
         assert parts.grad_fn is not None
 
+        # Get Stage2 Mask Predict
         stage2_pred = self.model2(parts)
-        assert len(stage2_pred) == 6
+
+        # Calc Stage2 CrossEntropy Loss
         loss = []
         for i in range(6):
-            # loss.append(self.criterion(stage2_pred[i], parts_label[i].argmax(dim=1, keepdim=False)))
-            loss.append(self.criterion(stage2_pred[i], parts_mask_gt[:, i].long()))
+            loss.append(self.criterion(stage2_pred[i], parts_label[i].argmax(dim=1, keepdim=False)))
+            # loss.append(self.criterion(stage2_pred[i], parts_mask_gt[:, i].long()))
         loss = torch.stack(loss)
         return loss
 
@@ -150,7 +169,7 @@ class TrainModel(TemplateModel):
         for batch in self.eval_loader:
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label']
-            parts_mask_gt = batch['parts_mask_gt'].to(self.device)
+            # parts_mask_gt = batch['parts_mask_gt'].to(self.device)
             N, L, H, W = orig_label.shape
 
             stage1_pred = self.model(image)
@@ -165,8 +184,8 @@ class TrainModel(TemplateModel):
             assert len(stage2_pred) == 6
             loss = []
             for i in range(6):
-                # loss.append(self.criterion(stage2_pred[i], parts_label[i].argmax(dim=1, keepdim=False)).item())
-                loss.append(self.criterion(stage2_pred[i], parts_mask_gt[:, i].long()).item())
+                loss.append(self.criterion(stage2_pred[i], parts_label[i].argmax(dim=1, keepdim=False)).item())
+                # loss.append(self.criterion(stage2_pred[i], parts_mask_gt[:, i].long()).item())
             loss_list.append(np.mean(loss))
         return np.mean(loss_list)
 
@@ -229,12 +248,14 @@ class TrainModel(TemplateModel):
         torch.save(state, fname)
         print('save model at {}'.format(fname))
 
-    def load_pretrained(self, model):
+    def load_pretrained(self, model, mode=None):
         path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/6b4324c6", 'best.pth.tar')
-        path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/6b4324c6", 'best.pth.tar')
-        # path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/49997f1e", "best.pth.tar")
-        path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_BC/b29dbe7e", "best.pth.tar")
-        # checkpoints_BC / b29dbe7e
+        if mode == 0:
+            path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/6b4324c6", 'best.pth.tar')
+        elif mode == 1:
+            path_select = os.path.join("/home/yinzi/data4/new_train/", 'best.pth.tar')
+        path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
+
         if model == 'model1':
             fname = path_model1
             state = torch.load(fname, map_location=self.device)
@@ -271,6 +292,7 @@ class TrainModel_F1val(TrainModel):
         print('epoch {}\tF1 {:.3}\terror {:.3}\tbest_F1 {:.3}'.format(self.epoch, F1, error, self.best_F1))
 
     def eval_F1(self):
+        # Reset f1 calc class
         self.f1_class = F1Score(self.device)
         for batch in self.eval_loader:
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
@@ -278,24 +300,41 @@ class TrainModel_F1val(TrainModel):
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label']
             N, L, H, W = orig_label.shape
 
-            stage1_pred = self.model(image)
+            stage1_pred = F.softmax(self.model(image), dim=1)
             assert stage1_pred.shape == (N, 9, 128, 128)
 
-            theta = self.select_net(F.softmax(stage1_pred, dim=1))
+            # Imshow stage1_pred on Tensorborad
+            stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
+            self.writer.add_image("stage1 predict%s" % uuid, stage1_pred_grid, self.step, dataformats="HW")
+
+            # Mask2Theta using ModelB
+            theta = self.select_net(stage1_pred)
             assert theta.shape == (N, 6, 2, 3)
+            # AffineCrop
             parts, parts_label, _ = affine_crop(img=orig, label=orig_label, theta_in=theta, map_location=self.device)
             assert parts.shape == (N, 6, 3, 81, 81)
 
+            # Predict Cropped Parts
             stage2_pred = self.model2(parts)
 
+            # Calc stage2 CrossEntropy Loss
             error = []
             for i in range(6):
                 error.append(self.criterion(stage2_pred[i], parts_mask_gt[:, i].long()))
+
+            # Imshow final predict mask
             final_pred = affine_mapback(stage2_pred, theta, self.device)
             final_grid = torchvision.utils.make_grid(final_pred.argmax(dim=1, keepdim=True))
             self.writer.add_image("final predict_%s" % uuid, final_grid[0], global_step=self.step, dataformats='HW')
+
+            # Accumulate F1
             self.f1_class.forward(final_pred, orig_label.argmax(dim=1, keepdim=False))
+
+        # Calc F1 overall
         _, F1_overall = self.f1_class.get_f1_score()
+
+        # clean f1_class
+        del self.f1_class
         return F1_overall, error
 
 
