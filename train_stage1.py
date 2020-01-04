@@ -45,19 +45,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ])
 }
@@ -67,7 +67,7 @@ Augment_Dataset = Stage1Augmentation(
     txt_file=txt_file_names,
     root_dir=root_dir,
     parts_root_dir=parts_root_dir,
-    resize=(64, 64)
+    resize=(128, 128)
 )
 enhaced_stage1_datasets = Augment_Dataset.get_dataset()
 

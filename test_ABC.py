@@ -20,13 +20,11 @@ select_model = SelectNet_resnet().to(device)
 # epoch 25        error 0.0605    best_error 0.0589
 
 
-# pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/5477864e", "best.pth.tar")
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/00ca488c", "best.pth.tar")
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/c8c68e16", "best.pth.tar")
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/ea3c3972", "best.pth.tar")
 pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/09d01660", "best.pth.tar")
 
-# pathA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/79648bf4", "best.pth.tar")
 pathAB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/6b4324c6", "best.pth.tar")
 pathB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/6b4324c6", 'best.pth.tar')
 # pathC = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/7fc23918", 'best.pth.tar')
@@ -67,19 +65,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ])
 }
@@ -108,7 +106,7 @@ for batch in dataloader['test']:
     N,L,H,W = orig_label.shape
 
     stage1_pred = model1(image)
-    assert stage1_pred.shape == (N, 9, 64, 64)
+    assert stage1_pred.shape == (N, 9, 128, 128)
     theta = select_model(F.softmax(stage1_pred, dim=1))
 
     # cens = calc_centroid(orig_label)

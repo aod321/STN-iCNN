@@ -16,9 +16,9 @@ model1 = FaceModel().to(device)
 # model2 = Stage2Model().to(device)
 select_model = SelectNet().to(device)
 # load state
-# path = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/79648bf4", "best.pth.tar")
-path = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/6b4324c6", "best.pth.tar")
+# path = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/791288bf4", "best.pth.tar")
 path_B = os.path.join("/home/yinzi/data4/new_train/checkpoints_B/9a95687c", "best.pth.tar")
+path = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/6b4324c6", "best.pth.tar")
 path_AB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/6b4324c6", 'best.pth.tar')
 state = torch.load(path, map_location=device)
 state_B = torch.load(path_B, map_location=device)
@@ -43,19 +43,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ])
 }
@@ -84,7 +84,7 @@ for batch in dataloader['test']:
     N,L,H,W = orig_label.shape
 
     stage1_pred = model1(image)
-    assert stage1_pred.shape == (N, 9, 64, 64)
+    assert stage1_pred.shape == (N, 9, 128, 128)
     theta = select_model(F.softmax(stage1_pred, dim=1))
 
     # cens = calc_centroid(orig_label)

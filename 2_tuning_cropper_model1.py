@@ -50,19 +50,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ])
 }
@@ -135,7 +135,7 @@ class TrainModel(TemplateModel):
         N, L, H, W = orig_label.shape
 
         stage1_pred = self.model(image)
-        assert stage1_pred.shape == (N, 9, 64, 64)
+        assert stage1_pred.shape == (N, 9, 128, 128)
 
         theta = self.select_net(F.softmax(stage1_pred, dim=1))
         assert theta.shape == (N, 6, 2, 3)
@@ -164,7 +164,7 @@ class TrainModel(TemplateModel):
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
             N, L, H, W = orig_label.shape
             stage1_pred = self.model(image)
-            assert stage1_pred.shape == (N, 9, 64, 64)
+            assert stage1_pred.shape == (N, 9, 128, 128)
             stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
             self.writer.add_image("stage1 predict%s" % uuid, stage1_pred_grid, step)
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
@@ -297,7 +297,7 @@ class TrainModel_eval(TrainModel):
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
             N, L, H, W = orig_label.shape
             stage1_pred = self.model(image)
-            assert stage1_pred.shape == (N, 9, 64, 64)
+            assert stage1_pred.shape == (N, 9, 128, 128)
 
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
             test_pred = F.softmax(stage1_pred, dim=1).argmax(dim=1, keepdim=True)

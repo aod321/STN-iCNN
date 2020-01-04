@@ -5,7 +5,7 @@ import torch.nn as nn
 
 
 def calc_centroid(tensor):
-    # Inputs Shape(N, 9 , 64, 64)
+    # Inputs Shape(N, 9 , 128, 128)
     # Return Shape(N, 9 ,2)
     input = tensor.float() + 1e-10
     n, l, h, w = input.shape
@@ -226,7 +226,7 @@ def affine_mapback(preds, theta, device):
     rtheta = rtheta[:, :, 0:2]
     assert rtheta.shape == (N, 6, 2, 3)
     del ones
-    # Parts_pred argmax Shape(N, 64, 64)
+    # Parts_pred argmax Shape(N, 128, 128)
     fg = []
     bg = []
     for i in range(6):

@@ -1,5 +1,5 @@
 from template import TemplateModel
-from model import SelectNet
+from model import SelectNet, SelectNet_new, SelectNet_resnet, SelectNet_dw, SelectNet_dw_resblock
 from preprocess import Resize, ToTensor, OrigPad
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
@@ -43,19 +43,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            Resize((64, 64)),
+            Resize((128, 128)),
             OrigPad()
         ])
 }
@@ -87,14 +87,14 @@ class TrainModel(TemplateModel):
 
         self.device = torch.device("cuda:%d" % args.cuda if torch.cuda.is_available() else "cpu")
 
-        self.model = SelectNet().to(self.device)
+        self.model = SelectNet_resnet().to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), self.args.lr)
         self.criterion = nn.SmoothL1Loss()
         self.metric =  nn.SmoothL1Loss()
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=5, gamma=0.1)
         self.train_loader = dataloader['train']
         self.eval_loader = dataloader['val']
-        self.ckpt_dir = "checkpoints_B/%s" % uuid_8
+        self.ckpt_dir = "checkpoints_B_resnet/%s" % uuid_8
         self.display_freq = args.display_freq
         # call it to check all members have been intiated
         self.check_init()
@@ -106,7 +106,7 @@ class TrainModel(TemplateModel):
         orig_label = batch['orig_label'].to(self.device)
         n,l,h,w = orig.shape
 
-        assert labels.shape == (n,9,64,64)
+        assert labels.shape == (n,9,128,128)
         theta = self.model(labels)
 
         assert orig_label.shape == (n,9,1024,1024)

@@ -32,7 +32,7 @@ class Resize(transforms.Resize):
             [F.interpolate(labels[r:r + 1].unsqueeze(0), self.size, mode='nearest').squeeze(0)
              for r in range(len(labels))
              ], dim=0)
-        assert resized_labels.shape == (9, 64, 64)
+        assert resized_labels.shape == (9, 128, 128)
 
         sample = {'image': resized_image, 'labels': resized_labels,
                   'orig': sample['orig'], 'orig_label': sample['orig_label'],
