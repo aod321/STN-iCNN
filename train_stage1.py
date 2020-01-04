@@ -20,6 +20,7 @@ print(uuid)
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", default=16, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
+parser.add_argument("--pretrainA", default=0, type=int, help="load pretrain")
 parser.add_argument("--cuda", default=0, type=int, help="Choose GPU with cuda number")
 parser.add_argument("--mode", default='resize', type=str, help="orig, resize")
 parser.add_argument("--lr", default=0.0025, type=float, help="Learning rate for optimizer")
@@ -90,6 +91,10 @@ class TrainModel(TemplateModel):
         self.device = torch.device("cuda:%d" % self.args.cuda if torch.cuda.is_available() else "cpu")
 
         self.model = Stage1Model().to(self.device)
+        if self.args.pretrainA == 1:
+            path_A = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/88736bbe", 'best.pth.tar')
+            state_A = torch.load(path_A, map_location=self.device)
+            self.model.load_state_dict(state_A['model1'])
         self.optimizer = optim.Adam(self.model.parameters(), self.args.lr)
         self.criterion = nn.CrossEntropyLoss()
         self.metric = nn.CrossEntropyLoss()
