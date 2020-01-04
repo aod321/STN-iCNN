@@ -3,6 +3,7 @@ import os
 from torch.utils.data import Dataset
 from skimage import io
 import cv2
+import torch
 
 
 class HelenDataset(Dataset):
@@ -55,7 +56,10 @@ class HelenDataset(Dataset):
 
         if self.transform:
             sample = self.transform(sample)
-
+            new_label = sample['labels']
+            new_label_fg = torch.sum(new_label[1:], dim=0, keepdim=True)  # 1 x 64 x 64
+            new_label[0] = 1. - new_label_fg
+            sample['labels'] = new_label
         return sample
 
     def getparts(self, idx):
