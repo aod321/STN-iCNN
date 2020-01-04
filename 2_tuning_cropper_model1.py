@@ -239,9 +239,9 @@ def start_train():
 
     for epoch in range(args.epochs):
         train.train()
-        train.scheduler.step()
+        train.scheduler.step(epoch)
         # train.scheduler2.step()
-        train.scheduler3.step()
+        train.scheduler3.step(epoch)
         if (epoch + 1) % args.eval_per_epoch == 0:
             train.eval()
 
