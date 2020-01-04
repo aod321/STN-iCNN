@@ -43,19 +43,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            # Resize((128, 128)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            # Resize((128, 128)),
+            Resize((128, 128)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            # Resize((128, 128)),
+            Resize((128, 128)),
             OrigPad()
         ])
 }
