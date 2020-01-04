@@ -87,6 +87,7 @@ class TrainModel(TemplateModel):
         self.args = argus
         self.writer = SummaryWriter('log')
         self.step = 0
+        self.step_eval = 0
         self.epoch = 0
         self.best_error = float('Inf')
 
@@ -154,9 +155,8 @@ class TrainModel(TemplateModel):
 
     def eval_error(self):
         loss_list = []
-        step = 0
         for batch in self.eval_loader:
-            step += 1
+            self.step_eval += 1
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
             N, L, H, W = orig_label.shape
@@ -166,7 +166,7 @@ class TrainModel(TemplateModel):
 
             # imshow stage1 mask predict
             stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
-            self.writer.add_image("stage1 predict%s" % uuid, stage1_pred_grid, step)
+            self.writer.add_image("stage1 predict%s" % uuid, stage1_pred_grid, self.step_eval)
 
             # Stage1Mask to Affine Theta
             theta = self.select_net(stage1_pred)
@@ -201,7 +201,7 @@ class TrainModel(TemplateModel):
         for i in range(6):
             parts_grid = torchvision.utils.make_grid(
                 parts[:, i].detach().cpu())
-            self.writer.add_image('croped_parts_%s_%d' % (uuid, i), parts_grid, self.step)
+            self.writer.add_image('croped_parts_%s_%d' % (uuid, i), parts_grid, self.step_eval)
         return np.mean(loss_list)
 
     def train(self):
@@ -256,7 +256,7 @@ class TrainModel(TemplateModel):
         print('save model at {}'.format(fname))
 
     def load_pretrained(self, model, mode=None):
-        path_modelA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/88736bbe", 'best.pth.tar')
+        path_modelA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", 'best.pth.tar')
         if mode == 0:
             path_modelB_select_net = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_selectnet/cab2d814",
                                                   'best.pth.tar')

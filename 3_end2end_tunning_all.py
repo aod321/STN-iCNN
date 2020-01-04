@@ -90,6 +90,7 @@ class TrainModel(TemplateModel):
         self.args = argus
         self.writer = SummaryWriter('log')
         self.step = 0
+        self.step_eval = 0
         self.epoch = 0
         self.best_error = float('Inf')
 
@@ -294,9 +295,8 @@ class TrainModel_F1val(TrainModel):
     def eval_F1(self):
         # Reset f1 calc class
         self.f1_class = F1Score(self.device)
-        step = 0
         for batch in self.eval_loader:
-            step += 1
+            self.step_eval += 1
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
             parts_mask_gt = batch['parts_mask_gt'].to(self.device)
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
@@ -307,7 +307,7 @@ class TrainModel_F1val(TrainModel):
 
             # Imshow stage1_pred on Tensorborad
             stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
-            self.writer.add_image("stage1 predict%s" % uuid, stage1_pred_grid[0], step, dataformats="HW")
+            self.writer.add_image("stage1 predict%s" % uuid, stage1_pred_grid[0], self.step_eval, dataformats="HW")
 
             # Mask2Theta using ModelB
             theta = self.select_net(stage1_pred)
@@ -315,6 +315,18 @@ class TrainModel_F1val(TrainModel):
             # AffineCrop
             parts, parts_label, _ = affine_crop(img=orig, label=orig_label, theta_in=theta, map_location=self.device)
             assert parts.shape == (N, 6, 3, 81, 81)
+
+            # imshow cropped parts
+            temp = []
+            for i in range(theta.shape[1]):
+                test = theta[:, i]
+                grid = F.affine_grid(theta=test, size=[N, 3, 81, 81], align_corners=True)
+                temp.append(F.grid_sample(input=orig, grid=grid, align_corners=True))
+            parts = torch.stack(temp, dim=1)
+            assert parts.shape == (N, 6, 3, 81, 81)
+            for i in range(6):
+                parts_grid = torchvision.utils.make_grid(parts[:, i].detach().cpu())
+                self.writer.add_image('croped_parts_%s_%d' % (uuid, i), parts_grid, self.step_eval)
 
             # Predict Cropped Parts
             stage2_pred = self.model2(parts)
@@ -327,7 +339,7 @@ class TrainModel_F1val(TrainModel):
             # Imshow final predict mask
             final_pred = affine_mapback(stage2_pred, theta, self.device)
             final_grid = torchvision.utils.make_grid(final_pred.argmax(dim=1, keepdim=True))
-            self.writer.add_image("final predict_%s" % uuid, final_grid[0], global_step=step, dataformats='HW')
+            self.writer.add_image("final predict_%s" % uuid, final_grid[0], global_step=self.step_eval, dataformats='HW')
 
             # Accumulate F1
             self.f1_class.forward(final_pred, orig_label.argmax(dim=1, keepdim=False))
