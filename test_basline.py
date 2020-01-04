@@ -105,7 +105,7 @@ for batch in dataloader['test']:
     big_pred = torch.stack(big_pred, dim=0)
     assert big_pred.shape == (N,9,1024,1024)
 
-    cens = torch.floor(calc_centroid(big_pred))
+    cens = calc_centroid(big_pred)
 
     # Test B
     # theta = select_model(label)
