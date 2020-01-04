@@ -192,63 +192,63 @@ class Stage2Augmentation(object):
                 Stage2_RandomAffine(degrees=15, translate=(0, 0),
                                     scale=(1, 1)),
                 transforms.RandomOrder([Stage2_GaussianNoise(),
-                                        Stage2_RandomAffine(degrees=0, translate=(0.2, 0.2),
-                                                            scale=(0.9, 1.1))
+                                        Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                            scale=(1, 2))
                                         ]
                                        )
             ],
             # random_choice 2:  noise, crop, noise + crop + rotation_scale_translate (random_order)
             self.augmentation_name[2]: [Stage2_GaussianNoise(),
-                                        Stage2_RandomAffine(degrees=30, translate=(0.2, 0.2), scale=(0.9, 1.1)),
+                                        Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3), scale=(0.8, 1.5)),
                                         transforms.RandomOrder([Stage2_GaussianNoise(),
-                                                                Stage2_RandomAffine(degrees=30, translate=(0.2, 0.2),
-                                                                                    scale=(0.9, 1.1))
+                                                                Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                                    scale=(1, 2))
                                                                 ]
                                                                )
                                         ],
             # random_choice 3:  noise + blur , noise + rotation ,noise + blur + rotation_scale_translate
-            self.augmentation_name[3]: [transforms.RandomOrder([Stage2_RandomAffine(degrees=30, translate=(0.2, 0.2),
-                                                                                    scale=(0.9, 1.1)),
-                                                                Stage2_RandomAffine(degrees=30, translate=(0.2, 0.2),
-                                                                                    scale=(0.9, 1.1))
+            self.augmentation_name[3]: [transforms.RandomOrder([Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                                    scale=(1, 2)),
+                                                                Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                                    scale=(1, 2))
                                                                 ]
                                                                ),
                                         transforms.RandomOrder([
                                             Stage2_RandomAffine(degrees=30, translate=None,
                                                                 scale=(1, 1)),
-                                            Stage2_RandomAffine(degrees=0, translate=(0.2, 0.2),
-                                                                scale=(1, 1))
+                                            Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
+                                                                scale=(1, 2))
                                         ]
 
                                         ),
                                         transforms.RandomOrder([Stage2_GaussianNoise(),
-                                                                Stage2_RandomAffine(degrees=30, translate=(0.2, 0.2),
-                                                                                    scale=(0.9, 1.1))]
+                                                                Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                                    scale=(1, 2))]
                                                                ),
                                         transforms.RandomOrder([Stage2_RandomAffine(degrees=30, translate=None,
                                                                                     scale=(1, 1)),
-                                                                Stage2_RandomAffine(degrees=0, translate=(0.2, 0.2),
-                                                                                    scale=(0.9, 1.1))
+                                                                Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
+                                                                                    scale=(1, 2))
                                                                 ]
                                                                )
                                         ],
             # random_choice 4:  noise + crop , blur + crop ,noise + blur + crop + rotation_scale_translate
-            self.augmentation_name[4]: [transforms.RandomOrder([Stage2_RandomAffine(degrees=15, translate=(0.2, 0.2),
-                                                                                    scale=(0.9, 1.1)),
-                                                                Stage2_RandomAffine(degrees=30, translate=(0.2, 0.2),
-                                                                                    scale=(0.9, 1.1))
+            self.augmentation_name[4]: [transforms.RandomOrder([Stage2_RandomAffine(degrees=15, translate=(0.3, 0.3),
+                                                                                    scale=(1, 2)),
+                                                                Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                                    scale=(1, 2))
                                                                 ]
                                                                ),
                                         transforms.Compose([Stage2_GaussianNoise(),
-                                                            Stage2_RandomAffine(degrees=30, translate=(0.2, 0.2),
-                                                                                scale=(0.9, 1.1)),
+                                                            Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                                scale=(1, 2)),
                                                             ]
                                                            ),
                                         transforms.RandomOrder([
-                                            Stage2_RandomAffine(degrees=0, translate=(0.2, 0.2),
-                                                                scale=(0.9, 1.1)),
-                                            Stage2_RandomAffine(degrees=30, translate=(0.2, 0.2),
-                                                                scale=(0.9, 1.1))
+                                            Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
+                                                                scale=(1, 2)),
+                                            Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
+                                                                scale=(1, 2))
                                         ]
                                         )
                                         ]
