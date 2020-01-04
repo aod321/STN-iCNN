@@ -3,6 +3,7 @@ import os
 from torch.utils.data import Dataset
 from skimage import io
 import cv2
+import torch
 
 
 class HelenDataset(Dataset):
@@ -49,17 +50,21 @@ class HelenDataset(Dataset):
         labels = np.uint8(np.concatenate(([bg.clip(0, 255)], labels[2:10]), axis=0))
 
         parts, parts_mask = self.getparts(idx)
-        sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels,
+        orig_size = image.shape
+        sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels, 'orig_size': orig_size,
                   'parts_gt': parts, 'parts_mask_gt': parts_mask}
 
         if self.transform:
             sample = self.transform(sample)
-
+            new_label = sample['labels']
+            new_label_fg = torch.sum(new_label[1:], dim=0, keepdim=True)  # 1 x 128 x 128
+            new_label[0] = 1. - new_label_fg
+            sample['labels'] = new_label
         return sample
 
     def getparts(self, idx):
         name = self.name_list[idx, 1].strip()
-        name_list = ['eye1', 'eye2', 'eyebrow1', 'eyebrow2', 'nose', 'mouth']
+        name_list = ['eyebrow1', 'eyebrow2', 'eye1', 'eye2', 'nose', 'mouth']
         path = {x: os.path.join(self.parts_root_dir, x, self.mode)
                 for x in name_list}
         parts_path = {x: os.path.join(path[x], name + "_image.png")
