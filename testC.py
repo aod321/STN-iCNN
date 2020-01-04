@@ -20,6 +20,7 @@ select_model = SelectNet().to(device)
 # path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/ca8f5c52", "best.pth.tar")
 # path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/b9d37dbc", "best.pth.tar")
 # path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/49997f1e", "best.pth.tar")
+# path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
 path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
 # path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/1daed2c2", "best.pth.tar")
 # path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/ea3c3972", "best.pth.tar")
@@ -53,19 +54,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ])
 }

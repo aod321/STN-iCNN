@@ -97,6 +97,9 @@ class TrainModel(TemplateModel):
         self.model = Stage1Model().to(self.device)
         if self.args.pretrainA:
             self.load_pretrained("model1")
+        if self.args.lr == 0:
+            for param in self.model.parameters():
+                param.requires_grad = False
         # self.model2 = Stage2Model().to(self.device)
         # self.load_pretrained("model2")
         if self.args.new:
@@ -162,7 +165,8 @@ class TrainModel(TemplateModel):
             N, L, H, W = orig_label.shape
             stage1_pred = self.model(image)
             assert stage1_pred.shape == (N, 9, 64, 64)
-
+            stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
+            self.writer.add_image("stage1 predict%s" % uuid, stage1_pred_grid, step)
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
             assert theta.shape == (N, 6, 2, 3)
             assert orig_label.shape == (N, 9, 1024, 1024)
@@ -255,9 +259,7 @@ class TrainModel(TemplateModel):
         print('save model at {}'.format(fname))
 
     def load_pretrained(self, model):
-        path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/79648bf4", 'best.pth.tar')
-        # path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/61ad8a38", 'best.pth.tar')
-        # path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_B/9a95687c", 'best.pth.tar')
+        path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/8f4afb96", 'best.pth.tar')
         # checkpoints_B_new/0168b2ce resnet结构
         path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_new/0168b2ce", 'best.pth.tar')
 
@@ -300,7 +302,7 @@ class TrainModel_eval(TrainModel):
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
             test_pred = F.softmax(stage1_pred, dim=1).argmax(dim=1, keepdim=True)
             test_pred_grid = torchvision.utils.make_grid(test_pred)
-            self.writer.add_image("stage1_pred_%s" % uuid, test_pred_grid[0], self.step, dataformats='HW')
+            self.writer.add_image("stage1_pred_%s" % uuid, test_pred_grid[0], step, dataformats='HW')
             assert theta.shape == (N, 6, 2, 3)
             assert orig_label.shape == (N, 9, 1024, 1024)
             cens = torch.floor(calc_centroid(orig_label))
@@ -318,14 +320,12 @@ class TrainModel_eval(TrainModel):
 
             loss = self.regress_loss(theta, theta_label)
             loss_list.append(loss.item())
-
-
             parts, parts_labels, _ = affine_crop(orig, orig_label, theta_in=theta, map_location=self.device)
             final_parts_mask = affine_mapback(parts_labels, theta, self.device)
             final_grid = torchvision.utils.make_grid(
                 final_parts_mask.argmax(dim=1, keepdim=True))
             self.writer.add_image(
-                "final_parts_mask", final_grid[0], global_step=step, dataformats='HW')
+                "final_parts_mask %s" % uuid, final_grid[0], global_step=step, dataformats='HW')
             f1_class.forward(final_parts_mask, orig_label.argmax(dim=1, keepdim=False))
         _, F1_overall =f1_class.get_f1_score()
 
@@ -407,7 +407,7 @@ class TrainModel_eval(TrainModel):
         print('save model at {}'.format(fname))
 
     def load_pretrained(self, model):
-        path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/79648bf4", 'best.pth.tar')
+        path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/8f4afb96", 'best.pth.tar')
         # path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/61ad8a38", 'best.pth.tar')
         # path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_B/9a95687c", 'best.pth.tar')
 

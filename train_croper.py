@@ -43,19 +43,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ])
 }
@@ -106,7 +106,7 @@ class TrainModel(TemplateModel):
         orig_label = batch['orig_label'].to(self.device)
         n,l,h,w = orig.shape
 
-        assert labels.shape == (n,9,128,128)
+        assert labels.shape == (n,9,64,64)
         theta = self.model(labels)
 
         assert orig_label.shape == (n,9,1024,1024)

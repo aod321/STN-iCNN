@@ -18,13 +18,18 @@ model2 = Stage2Model().to(device)
 # load state
 
 path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/dd0a0bf4", "best.pth.tar")
-path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/79f85a02", "best.pth.tar")
+path_model2_all = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/79f85a02", "best.pth.tar")
+path_model2_eyebrows = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
 
 state1 = torch.load(path_model1, map_location=device)
-state2 = torch.load(path_model2, map_location=device)
-model1.load_state_dict(state1['model1'])
-model2.load_state_dict(state2['model2'])
+state2_all = torch.load(path_model2_all, map_location=device)
+state2_brows = torch.load(path_model2_eyebrows, map_location=device)
 
+match_brows = {k: v for k, v in state2_brows['model2'].items() if k.startswith('model.0')}
+state2_all['model2'].update(match_brows)
+
+model1.load_state_dict(state1['model1'])
+model2.load_state_dict(state2_all['model2'])
 
 # Dataset and Dataloader
 # Dataset Read_in Part

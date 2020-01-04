@@ -43,19 +43,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ])
 }
@@ -84,7 +84,7 @@ for batch in dataloader['test']:
     N,L,H,W = orig_label.shape
 
     stage1_pred = model1(image)
-    assert stage1_pred.shape == (N, 9, 128, 128)
+    assert stage1_pred.shape == (N, 9, 64, 64)
     theta = select_model(F.softmax(stage1_pred, dim=1))
 
     # cens = calc_centroid(orig_label)

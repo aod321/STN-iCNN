@@ -47,19 +47,19 @@ transforms_list = {
     'train':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
             ToTensor(),
-            Resize((128, 128)),
+            Resize((64, 64)),
             OrigPad()
         ])
 }
@@ -126,7 +126,7 @@ class TrainModel(TemplateModel):
         assert parts_mask_gt.shape == (N, 6, 81, 81)
 
         stage1_pred = self.model(image)
-        assert stage1_pred.shape == (N, 9, 128, 128)
+        assert stage1_pred.shape == (N, 9, 64, 64)
 
         theta = self.select_net(F.softmax(stage1_pred, dim=1))
         assert theta.shape == (N, 6, 2, 3)
@@ -154,7 +154,7 @@ class TrainModel(TemplateModel):
             N, L, H, W = orig_label.shape
 
             stage1_pred = self.model(image)
-            assert stage1_pred.shape == (N, 9, 128, 128)
+            assert stage1_pred.shape == (N, 9, 64, 64)
 
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
             assert theta.shape == (N, 6, 2, 3)
@@ -279,7 +279,7 @@ class TrainModel_F1val(TrainModel):
             N, L, H, W = orig_label.shape
 
             stage1_pred = self.model(image)
-            assert stage1_pred.shape == (N, 9, 128, 128)
+            assert stage1_pred.shape == (N, 9, 64, 64)
 
             theta = self.select_net(F.softmax(stage1_pred, dim=1))
             assert theta.shape == (N, 6, 2, 3)
