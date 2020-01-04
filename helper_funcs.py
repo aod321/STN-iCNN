@@ -147,9 +147,7 @@ def affine_crop(img, label, points=None, theta_in=None, map_location=None):
     n, l, h, w = img.shape
     img_in = img.clone()
     label_in = label.clone()
-    assert (points or theta_in)
-    assert (points and theta_in) is None
-    if points:
+    if points is not None:
         theta = torch.zeros((n, 6, 2, 3), dtype=torch.float32, device=map_location, requires_grad=False)
         points_in = points.clone()
         points_in = torch.cat([points_in[:, 1:6],
@@ -161,7 +159,7 @@ def affine_crop(img, label, points=None, theta_in=None, map_location=None):
             theta[:, i, 0, 2] = -1 + (2 * points_in[:, i, 1]) / (w - 1)
             theta[:, i, 1, 1] = (81 - 1) / (h - 1)
             theta[:, i, 1, 2] = -1 + (2 * points_in[:, i, 0]) / (h - 1)
-    elif theta_in:
+    elif theta_in is not None:
         theta = theta_in
     assert theta.shape == (n, 6, 2, 3)
 

@@ -17,8 +17,9 @@ model2 = Stage2Model().to(device)
 # load state
 # path = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/745d57da", "best.pth.tar")
 path = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/02a38440", "best.pth.tar")
+path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
 # path = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/b9d37dbc", "best.pth.tar")
-state = torch.load(path, map_location=device)
+state = torch.load(path_model2, map_location=device)
 model2.load_state_dict(state['model2'])
 
 # Dataset and Dataloader
@@ -76,7 +77,7 @@ for batch in dataloader['test']:
     assert orig_label.shape == (N, 9, 1024, 1024)
     cens = calc_centroid(orig_label)
     assert cens.shape == (N, 9, 2)
-    parts, parts_labels, theta = affine_crop(orig, orig_label, cens, device)
+    parts, parts_labels, theta = affine_crop(img=orig, label=orig_label, points=cens, map_location=device)
     stage2_pred = model2(parts)
 
     for i in range(6):
