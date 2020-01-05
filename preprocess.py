@@ -320,8 +320,9 @@ class Stage2_GaussianNoise(object):
         parts = sample['image']
         parts = [np.array(parts[r], np.uint8)
                  for r in range(len(parts))]
-        parts = [random_noise(parts[r])
-                 for r in range(len(parts))]
+        for r in range(len(parts)):
+            parts[r] = np.where(parts[r] != 0, random_noise(parts[r]), parts[r])
+
         parts = [TF.to_pil_image(np.uint8(255 * parts[r]))
                  for r in range(len(parts))
                  ]

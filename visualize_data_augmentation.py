@@ -44,3 +44,6 @@ for batch in dataloader['train']:
         writer.add_image("[Augmentation]Stage2Image%s_%d" % (uuid, i), image_grid, global_step=step)
         writer.add_image("[Augmentation]Stage2Label%s_%d" % (uuid, i), label_grid[0], global_step=step, dataformats='HW')
 
+    if step == 20:
+        break
+

@@ -180,14 +180,17 @@ class Stage2Augmentation(object):
         self.set_transforms_list()
 
     def set_choice(self):
-        degree_small = 15
-        degree_large = 30
+        degree_small = (-15, 15)
+        degree_large = (-15, 15)
+        None_degree = 0
 
         translate_small = (0.1, 0.1)
         translate_normal = (0.3, 0.3)
 
         scale_small = (0.8, 1)
-        scale_large = (1, 2)
+        scale_mouth_translate = (0.8, 1)
+        scale_large = (1, 1.5)
+        scale_with_translate = (1, 1)
 
         def rand_affine(degree_eyes, degree_mouth, translate_eyes, translate_mouth, scale_eyes, scale_mouth,
                         noise=False):
@@ -200,13 +203,17 @@ class Stage2Augmentation(object):
                      ]
                 )
             else:
-                out = transforms.RandomOrder([
+                out = transforms.Compose([
                     Stage2_GaussianNoise(),
-                    Stage2_RandomAffine(degrees=degree_eyes, translate=translate_eyes,
-                                        scale=scale_eyes),
-                    Stage2_nose_mouth_RandomAffine(degrees=degree_mouth, translate=translate_mouth,
-                                                   scale=scale_mouth)
-                ])
+                    transforms.RandomOrder([
+                        Stage2_RandomAffine(degrees=degree_eyes, translate=translate_eyes,
+                                            scale=scale_eyes),
+                        Stage2_nose_mouth_RandomAffine(degrees=degree_mouth,
+                                                       translate=translate_mouth,
+                                                       scale=scale_mouth)
+                    ])
+                ]
+                )
 
             return out
 
@@ -218,10 +225,10 @@ class Stage2Augmentation(object):
                 rand_affine(degree_eyes=degree_large, degree_mouth=degree_large, translate_eyes=None,
                             translate_mouth=None, scale_eyes=None, scale_mouth=None),
                 # scale only
-                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=None,
+                rand_affine(degree_eyes=None_degree, degree_mouth=None_degree, translate_eyes=None,
                             translate_mouth=None, scale_eyes=scale_large, scale_mouth=scale_small),
                 # translate only
-                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=translate_normal,
+                rand_affine(degree_eyes=None_degree, degree_mouth=None_degree, translate_eyes=translate_normal,
                             translate_mouth=translate_small, scale_eyes=None, scale_mouth=None),
                 # noise only
                 Stage2_GaussianNoise()
@@ -235,12 +242,13 @@ class Stage2Augmentation(object):
                 rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=None,
                             translate_mouth=None, scale_eyes=None, scale_mouth=None,
                             noise=True),
-                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=translate_normal,
-                            translate_mouth=translate_normal, scale_eyes=scale_large, scale_mouth=scale_small),
-                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=None,
+                rand_affine(degree_eyes=None_degree, degree_mouth=None_degree, translate_eyes=translate_normal,
+                            translate_mouth=translate_normal,
+                            scale_eyes=scale_with_translate, scale_mouth=scale_mouth_translate),
+                rand_affine(degree_eyes=None_degree, degree_mouth=None_degree, translate_eyes=None,
                             translate_mouth=None, scale_eyes=scale_large, scale_mouth=scale_small,
                             noise=True),
-                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=translate_normal,
+                rand_affine(degree_eyes=None_degree, degree_mouth=None_degree, translate_eyes=translate_normal,
                             translate_mouth=translate_small, scale_eyes=None, scale_mouth=None,
                             noise=True)
             ],
@@ -248,15 +256,17 @@ class Stage2Augmentation(object):
             self.augmentation_name[3]: [
                 transforms.RandomOrder([
                     rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=translate_normal,
-                                translate_mouth=translate_normal, scale_eyes=scale_large, scale_mouth=scale_small),
+                                translate_mouth=translate_normal, scale_eyes=scale_with_translate,
+                                scale_mouth=scale_mouth_translate),
                     rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=None,
                                 translate_mouth=None, scale_eyes=scale_large, scale_mouth=scale_small,
                                 noise=True),
                     rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=translate_normal,
                                 translate_mouth=translate_small, scale_eyes=None, scale_mouth=None,
                                 noise=True),
-                    rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=translate_normal,
-                                translate_mouth=translate_normal, scale_eyes=scale_large, scale_mouth=scale_small,
+                    rand_affine(degree_eyes=None_degree, degree_mouth=None_degree, translate_eyes=translate_normal,
+                                translate_mouth=translate_normal,
+                                scale_eyes=scale_with_translate, scale_mouth=scale_mouth_translate,
                                 noise=True),
                 ])
             ],
@@ -264,7 +274,8 @@ class Stage2Augmentation(object):
             #  RSTN
             self.augmentation_name[4]: [
                 rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=translate_normal,
-                            translate_mouth=translate_normal, scale_eyes=scale_large, scale_mouth=scale_small,
+                            translate_mouth=translate_normal,
+                            scale_eyes=scale_with_translate, scale_mouth=scale_mouth_translate,
                             noise=True)
             ]
         }
@@ -282,6 +293,21 @@ class Stage2Augmentation(object):
             self.augmentation_name[1]: transforms.Compose([
                 Stage2ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice1']),
+                Stage2_ToTensor()
+            ]),
+            self.augmentation_name[2]: transforms.Compose([
+                Stage2ToPILImage(),
+                transforms.RandomChoice(self.randomchoice['choice2']),
+                Stage2_ToTensor()
+            ]),
+            self.augmentation_name[3]: transforms.Compose([
+                Stage2ToPILImage(),
+                transforms.RandomChoice(self.randomchoice['choice3']),
+                Stage2_ToTensor()
+            ]),
+            self.augmentation_name[4]: transforms.Compose([
+                Stage2ToPILImage(),
+                transforms.RandomChoice(self.randomchoice['choice4']),
                 Stage2_ToTensor()
             ])
         }
