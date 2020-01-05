@@ -180,11 +180,11 @@ class Stage2Augmentation(object):
         choice = {
             # random_choice 1:  Blur, rotaion, Blur + rotation + scale_translate (random_order)
             self.augmentation_name[1]: [
-                Stage2_RandomAffine(degrees=15, translate=(0, 0),
-                                    scale=(1, 1)),
+                Stage2_RandomAffine(degrees=15, translate=(0.2, 0.2),
+                                    scale=(1, 1.5)),
                 transforms.RandomOrder([Stage2_GaussianNoise(),
-                                        Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                            scale=(0.9, 1.1))
+                                        Stage2_RandomAffine(degrees=15, translate=(0.2, 0.2),
+                                                            scale=(1, 1.5))
                                         ]
                                        )
             ],
@@ -258,21 +258,6 @@ class Stage2Augmentation(object):
             self.augmentation_name[1]: transforms.Compose([
                 Stage2ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice1']),
-                Stage2_ToTensor()
-            ]),
-            self.augmentation_name[2]: transforms.Compose([
-                Stage2ToPILImage(),
-                transforms.RandomChoice(self.randomchoice['choice2']),
-                Stage2_ToTensor()
-            ]),
-            self.augmentation_name[3]: transforms.Compose([
-                Stage2ToPILImage(),
-                transforms.RandomChoice(self.randomchoice['choice3']),
-                Stage2_ToTensor()
-            ]),
-            self.augmentation_name[4]: transforms.Compose([
-                Stage2ToPILImage(),
-                transforms.RandomChoice(self.randomchoice['choice4']),
                 Stage2_ToTensor()
             ])
         }
