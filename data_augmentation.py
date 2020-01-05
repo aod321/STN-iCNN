@@ -17,12 +17,14 @@ import math
 import cv2
 import matplotlib.pyplot as plt
 from preprocess import Resize, GaussianNoise, RandomAffine, Blurfilter, \
-    ToPILImage, ToTensor, Stage2_ToTensor, Stage2_RandomAffine, Stage2_GaussianNoise, Stage2ToPILImage, OrigPad
+    ToPILImage, ToTensor, Stage2_ToTensor, Stage2_RandomAffine, Stage2_GaussianNoise, Stage2ToPILImage, OrigPad, \
+    Stage2_nose_mouth_RandomAffine
 
 
 class Stage1Augmentation(object):
     def __init__(self, dataset, txt_file, root_dir, resize):
         self.augmentation_name = ['origin', 'choice1', 'choice2', 'choice3', 'choice4']
+        # self.augmentation_name = ['origin', 'choice1']
         self.randomchoice = None
         self.transforms = None
         self.transforms_list = None
@@ -165,6 +167,7 @@ class Stage1Augmentation(object):
 class Stage2Augmentation(object):
     def __init__(self, dataset, txt_file, root_dir, resize=None):
         self.augmentation_name = ['origin', 'choice1', 'choice2', 'choice3', 'choice4']
+        # self.augmentation_name = ['origin', 'choice1']
         self.randomchoice = None
         self.transforms = None
         self.transforms_list = None
@@ -177,72 +180,93 @@ class Stage2Augmentation(object):
         self.set_transforms_list()
 
     def set_choice(self):
-        choice = {
-            # random_choice 1:  Blur, rotaion, Blur + rotation + scale_translate (random_order)
-            self.augmentation_name[1]: [
-                Stage2_RandomAffine(degrees=15, translate=(0.2, 0.2),
-                                    scale=(1, 1.5)),
-                transforms.RandomOrder([Stage2_GaussianNoise(),
-                                        Stage2_RandomAffine(degrees=15, translate=(0.2, 0.2),
-                                                            scale=(1, 1.5))
-                                        ]
-                                       )
-            ],
-            # random_choice 2:  noise, crop, noise + crop + rotation_scale_translate (random_order)
-            self.augmentation_name[2]: [Stage2_GaussianNoise(),
-                                        Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3), scale=(0.8, 1.5)),
-                                        transforms.RandomOrder([Stage2_GaussianNoise(),
-                                                                Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                                    scale=(0.8, 1.5))
-                                                                ]
-                                                               )
-                                        ],
-            # random_choice 3:  noise + blur , noise + rotation ,noise + blur + rotation_scale_translate
-            self.augmentation_name[3]: [transforms.RandomOrder([Stage2_RandomAffine(degrees=30, translate=(0.3, 0.2),
-                                                                                    scale=(0.8, 1.5)),
-                                                                Stage2_RandomAffine(degrees=30, translate=(0.2, 0.3),
-                                                                                    scale=(1, 1.5))
-                                                                ]
-                                                               ),
-                                        transforms.RandomOrder([
-                                            Stage2_RandomAffine(degrees=30, translate=None,
-                                                                scale=(1, 1)),
-                                            Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
-                                                                scale=(1, 1))
-                                        ]
+        degree_small = 15
+        degree_large = 30
 
-                                        ),
-                                        transforms.RandomOrder([Stage2_GaussianNoise(),
-                                                                Stage2_RandomAffine(degrees=30, translate=(0.8, 0.8),
-                                                                                    scale=(1, 1.5))]
-                                                               ),
-                                        transforms.RandomOrder([Stage2_RandomAffine(degrees=30, translate=None,
-                                                                                    scale=(1, 1)),
-                                                                Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
-                                                                                    scale=(0.5, 1.5))
-                                                                ]
-                                                               )
-                                        ],
-            # random_choice 4:  noise + crop , blur + crop ,noise + blur + crop + rotation_scale_translate
-            self.augmentation_name[4]: [transforms.RandomOrder([Stage2_RandomAffine(degrees=15, translate=(0.3, 0.3),
-                                                                                    scale=(0.5, 1)),
-                                                                Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                                    scale=(0.5, 1))
-                                                                ]
-                                                               ),
-                                        transforms.Compose([Stage2_GaussianNoise(),
-                                                            Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                                scale=(0.5, 2)),
-                                                            ]
-                                                           ),
-                                        transforms.RandomOrder([
-                                            Stage2_RandomAffine(degrees=0, translate=(0.3, 0.3),
-                                                                scale=(0.5, 1)),
-                                            Stage2_RandomAffine(degrees=30, translate=(0.3, 0.3),
-                                                                scale=(1, 1.5))
-                                        ]
-                                        )
-                                        ]
+        translate_small = (0.1, 0.1)
+        translate_normal = (0.3, 0.3)
+
+        scale_small = (0.8, 1)
+        scale_large = (1, 2)
+
+        def rand_affine(degree_eyes, degree_mouth, translate_eyes, translate_mouth, scale_eyes, scale_mouth,
+                        noise=False):
+            if not noise:
+                out = transforms.RandomOrder(
+                    [Stage2_RandomAffine(degrees=degree_eyes, translate=translate_eyes,
+                                         scale=scale_eyes),
+                     Stage2_nose_mouth_RandomAffine(degrees=degree_mouth, translate=translate_mouth,
+                                                    scale=scale_mouth)
+                     ]
+                )
+            else:
+                out = transforms.RandomOrder([
+                    Stage2_GaussianNoise(),
+                    Stage2_RandomAffine(degrees=degree_eyes, translate=translate_eyes,
+                                        scale=scale_eyes),
+                    Stage2_nose_mouth_RandomAffine(degrees=degree_mouth, translate=translate_mouth,
+                                                   scale=scale_mouth)
+                ])
+
+            return out
+
+        choice = {
+            # random_choice 1: 30 rotaion, scale, translate, noise (random_order)
+            #  R, S, T, N
+            self.augmentation_name[1]: [
+                # rotate only
+                rand_affine(degree_eyes=degree_large, degree_mouth=degree_large, translate_eyes=None,
+                            translate_mouth=None, scale_eyes=None, scale_mouth=None),
+                # scale only
+                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=None,
+                            translate_mouth=None, scale_eyes=scale_large, scale_mouth=scale_small),
+                # translate only
+                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=translate_normal,
+                            translate_mouth=translate_small, scale_eyes=None, scale_mouth=None),
+                # noise only
+                Stage2_GaussianNoise()
+            ],
+            self.augmentation_name[2]: [
+                #  RS,RT,RN,ST,SN,TN
+                rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=None,
+                            translate_mouth=None, scale_eyes=scale_large, scale_mouth=scale_small),
+                rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=translate_normal,
+                            translate_mouth=translate_small, scale_eyes=None, scale_mouth=None),
+                rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=None,
+                            translate_mouth=None, scale_eyes=None, scale_mouth=None,
+                            noise=True),
+                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=translate_normal,
+                            translate_mouth=translate_normal, scale_eyes=scale_large, scale_mouth=scale_small),
+                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=None,
+                            translate_mouth=None, scale_eyes=scale_large, scale_mouth=scale_small,
+                            noise=True),
+                rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=translate_normal,
+                            translate_mouth=translate_small, scale_eyes=None, scale_mouth=None,
+                            noise=True)
+            ],
+            # RST, RSN, RTN, STN
+            self.augmentation_name[3]: [
+                transforms.RandomOrder([
+                    rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=translate_normal,
+                                translate_mouth=translate_normal, scale_eyes=scale_large, scale_mouth=scale_small),
+                    rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=None,
+                                translate_mouth=None, scale_eyes=scale_large, scale_mouth=scale_small,
+                                noise=True),
+                    rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=translate_normal,
+                                translate_mouth=translate_small, scale_eyes=None, scale_mouth=None,
+                                noise=True),
+                    rand_affine(degree_eyes=None, degree_mouth=None, translate_eyes=translate_normal,
+                                translate_mouth=translate_normal, scale_eyes=scale_large, scale_mouth=scale_small,
+                                noise=True),
+                ])
+            ],
+
+            #  RSTN
+            self.augmentation_name[4]: [
+                rand_affine(degree_eyes=degree_small, degree_mouth=degree_large, translate_eyes=translate_normal,
+                            translate_mouth=translate_normal, scale_eyes=scale_large, scale_mouth=scale_small,
+                            noise=True)
+            ]
         }
         self.randomchoice = choice
 

@@ -23,9 +23,11 @@ select_model = SelectNet().to(device)
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/00ca488c", "best.pth.tar")
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/c8c68e16", "best.pth.tar")
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/ea3c3972", "best.pth.tar")
-pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/a8881520", "best.pth.tar")
+pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/b7d093a2", "best.pth.tar")
+path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", "best.pth.tar")
 
-pathAB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", "best.pth.tar")
+# pathAB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", "best.pth.tar")
+pathAB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_custom/1bb38f60", "best.pth.tar")
 pathB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", 'best.pth.tar')
 # pathC = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/7fc23918", 'best.pth.tar')
 # pathC = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/02a38440", 'best.pth.tar')
@@ -37,16 +39,17 @@ pathC = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", 'best
 # 1daed2c2 使用了修复的crop数据集，无数据增广训练。单独F1得分为0.8551966, AB结果送入。F1得分为0.650
 
 # state = torch.load(path, map_location=device)
-stateAB = torch.load(pathAB)
-stageC = torch.load(pathC)
-stateABC = torch.load(pathABC)
+stageA = torch.load(path_model1, map_location=device)
+stateAB = torch.load(pathAB, map_location=device)
+stageC = torch.load(pathC, map_location=device)
+stateABC = torch.load(pathABC, map_location=device)
 
 # model1.load_state_dict(stateAB['model1'])
 # select_model.load_state_dict(stateAB['select_net'])
 # model2.load_state_dict(stageC['model2'])
-model1.load_state_dict(stateAB['model1'])
-select_model.load_state_dict(stateAB['select_net'])
-model2.load_state_dict(stageC['model2'])
+model1.load_state_dict(stateABC['model1'])
+select_model.load_state_dict(stateABC['select_net'])
+model2.load_state_dict(stateABC['model2'])
 #stateABC 0.8088
 #StageC 0.69
 
@@ -90,8 +93,8 @@ Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
            for x in ['train', 'val', 'test']
            }
 
-dataloader = {x: DataLoader(Dataset[x], batch_size=4,
-                            shuffle=True, num_workers=4)
+dataloader = {x: DataLoader(Dataset[x], batch_size=10,
+                            shuffle=False, num_workers=4)
               for x in ['train', 'val', 'test']
               }
 f1_class = F1Score(device)

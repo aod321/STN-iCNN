@@ -158,7 +158,7 @@ class F1Score(torch.nn.CrossEntropyLoss):
         return self.F1, self.F1_overall
 
 
-def affine_crop(img, label, points=None, theta_in=None, map_location=None):
+def affine_crop(img, label, points=None, theta_in=None, map_location=None, floor=False):
     n, l, h, w = img.shape
     img_in = img.to(map_location)
     label_in = label.to(map_location)
@@ -168,6 +168,8 @@ def affine_crop(img, label, points=None, theta_in=None, map_location=None):
         points_in = torch.cat([points_in[:, 1:6],
                                points_in[:, 6:9].mean(dim=1, keepdim=True)],
                               dim=1)
+        if floor:
+            points_in = torch.floor(points_in)
         assert points_in.shape == (n, 6, 2)
         for i in range(6):
             theta[:, i, 0, 0] = (81 - 1) / (w - 1)

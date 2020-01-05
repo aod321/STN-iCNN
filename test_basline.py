@@ -17,19 +17,23 @@ model1 = FaceModel().to(device)
 model2 = Stage2Model().to(device)
 # load state
 
-# path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", "best.pth.tar")
-path_model1 = os.path.join("/home/yinzi/data3/vimg18/icnn-face/checkpoints", "best.pth.tar")
+path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", "best.pth.tar")
+# path_model1 = os.path.join("/home/yinzi/data3/vimg18/icnn-face/checkpoints", "best.pth.tar")
 path_model2_all = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/79f85a02", "best.pth.tar")
 path_model2_396 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
+path_model2_534 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/53488972", "best.pth.tar")
+path_model2_ABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/b7d093a2", "best.pth.tar")
 
 state1 = torch.load(path_model1, map_location=device)
 state2_all = torch.load(path_model2_all, map_location=device)
+state2_ABC = torch.load(path_model2_ABC, map_location=device)
 state2_396 = torch.load(path_model2_396, map_location=device)
+state2_534 = torch.load(path_model2_534, map_location=device)
 
 # match_brows = {k: v for k, v in state2_brows['model2'].items() if k.startswith('model.0')}
 # state2_all['model2'].update(match_brows)
 
-model1.load_state_dict(state1['model'])
+model1.load_state_dict(state1['model1'])
 model2.load_state_dict(state2_396['model2'])
 
 # Dataset and Dataloader
@@ -106,11 +110,11 @@ for batch in dataloader['test']:
     big_pred = torch.stack(big_pred, dim=0)
     assert big_pred.shape == (N,9,1024,1024)
 
-    cens = calc_centroid(big_pred)
+    cens = torch.floor(calc_centroid(orig_label))
 
     # Test B
     # theta = select_model(label)
-    parts, parts_labels, theta = affine_crop(orig, orig_label, points=cens, map_location=device)
+    parts, parts_labels, theta = affine_crop(orig, orig_label, points=cens, map_location=device, floor=True)
     # parts, parts_labels, _ = affine_crop(orig, orig_label, theta_in=theta, map_location=device)
 
     stage2_pred = model2(parts)

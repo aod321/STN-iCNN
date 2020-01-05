@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 import tensorboardX as tb
 from torchvision import transforms
 import argparse
@@ -11,9 +11,10 @@ from tensorboardX import SummaryWriter
 import uuid as uid
 from template import TemplateModel
 from model import Stage2Model
-from preprocess import Stage2ToPILImage, Stage2_ToTensor
-from dataset import PartsDataset
+from preprocess import Stage2ToPILImage, Stage2_ToTensor, OldStage2_ToPILImage, OldStage2Resize, OldStage2ToTensor
+from dataset import PartsDataset, OldPartsDataset
 from data_augmentation import Stage2Augmentation
+
 import torchvision
 import os
 
@@ -64,6 +65,18 @@ stage2_augmentation = Stage2Augmentation(dataset=PartsDataset,
                                          )
 enhaced_stage2_datasets = stage2_augmentation.get_dataset()
 
+old_parts_root = "/data1/yinzi/facial_parts"
+old_stage2_dataset = OldPartsDataset(txt_file=txt_file_names['train'],
+                                     root_dir=old_parts_root,
+                                     transform=transforms.Compose([
+                                         OldStage2_ToPILImage(),
+                                         OldStage2ToTensor()
+                                     ])
+                                     )
+
+final_stage2_datasets = {'train': ConcatDataset([enhaced_stage2_datasets['train'], old_stage2_dataset]),
+                         'val': enhaced_stage2_datasets['val']
+                         }
 # DataLoader
 # Dataset = {x: PartsDataset(txt_file=txt_file_names[x],
 #                            root_dir=parts_root_dir,

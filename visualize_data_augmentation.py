@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 import torch
 import torchvision
+import uuid as uid
+uuid = str(uid.uuid1())[0:10]
 
 writer = SummaryWriter('log')
 
@@ -29,6 +31,7 @@ dataloader = {x: DataLoader(enhaced_stage2_datasets[x], batch_size=16,
               }
 
 step = 0
+print(uuid)
 for batch in dataloader['train']:
     step += 1
     image = batch['image'].to(device)
@@ -38,6 +41,6 @@ for batch in dataloader['train']:
         print("imshow %d" % i)
         image_grid = torchvision.utils.make_grid(image[:, i])
         label_grid = torchvision.utils.make_grid(label[:, i:i+1])
-        writer.add_image("[Augmentation]Stage2Image_%d" % i, image_grid, global_step=step)
-        writer.add_image("[Augmentation]Stage2Label_%d" % i, label_grid[0], global_step=step, dataformats='HW')
+        writer.add_image("[Augmentation]Stage2Image%s_%d" % (uuid, i), image_grid, global_step=step)
+        writer.add_image("[Augmentation]Stage2Label%s_%d" % (uuid, i), label_grid[0], global_step=step, dataformats='HW')
 
