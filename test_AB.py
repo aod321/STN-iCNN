@@ -1,10 +1,10 @@
-from model import Stage2Model, FaceModel, SelectNet
+from model import FaceModel, SelectNet
 from tensorboardX import SummaryWriter
 from dataset import HelenDataset
 from torchvision import transforms
-from preprocess import ToPILImage, ToTensor, OrigPad, Resize
+from preprocess import ToTensor, OrigPad, Resize
 from torch.utils.data import DataLoader
-from helper_funcs import F1Score, calc_centroid, affine_crop, affine_mapback
+from helper_funcs import F1Score, affine_crop
 import torch.nn.functional as F
 import torchvision
 import torch

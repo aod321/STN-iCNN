@@ -12,7 +12,7 @@ import uuid as uid
 from template import TemplateModel
 from model import Stage2Model
 from preprocess import Stage2ToPILImage, Stage2_ToTensor, OldStage2_ToPILImage, OldStage2Resize, OldStage2ToTensor
-from dataset import PartsDataset, OldPartsDataset
+from dataset import PartsDataset
 from data_augmentation import Stage2Augmentation
 
 import torchvision
@@ -64,19 +64,6 @@ stage2_augmentation = Stage2Augmentation(dataset=PartsDataset,
                                          root_dir=parts_root_dir
                                          )
 enhaced_stage2_datasets = stage2_augmentation.get_dataset()
-
-old_parts_root = "/data1/yinzi/facial_parts"
-old_stage2_dataset = OldPartsDataset(txt_file=txt_file_names['train'],
-                                     root_dir=old_parts_root,
-                                     transform=transforms.Compose([
-                                         OldStage2_ToPILImage(),
-                                         OldStage2ToTensor()
-                                     ])
-                                     )
-
-final_stage2_datasets = {'train': ConcatDataset([enhaced_stage2_datasets['train'], old_stage2_dataset]),
-                         'val': enhaced_stage2_datasets['val']
-                         }
 # DataLoader
 # Dataset = {x: PartsDataset(txt_file=txt_file_names[x],
 #                            root_dir=parts_root_dir,

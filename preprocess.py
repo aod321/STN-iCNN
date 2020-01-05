@@ -4,9 +4,8 @@ from torchvision import transforms
 from torchvision.transforms import functional as TF
 import cv2
 import numpy as np
-import random
 from skimage.util import random_noise
-from PIL import ImageFilter, Image
+from PIL import Image
 import torch.nn.functional as F
 
 
@@ -26,13 +25,17 @@ class Resize(transforms.Resize):
         """
         image, labels = sample['image'], sample['labels']
         parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
-        resized_image = F.interpolate(image.unsqueeze(0), self.size, mode='bilinear', align_corners=True).squeeze(0)
+        if type(image) is Image.Image:
+            image = TF.to_tensor(image)
+        resized_image = TF.to_pil_image(F.interpolate(image.unsqueeze(0),
+                                                      self.size, mode='bilinear', align_corners=True).squeeze(0)
+                                        )
 
-        resized_labels = torch.cat(
-            [F.interpolate(labels[r:r + 1].unsqueeze(0), self.size, mode='nearest').squeeze(0)
-             for r in range(len(labels))
-             ], dim=0)
-        assert resized_labels.shape == (9, 128, 128)
+        resized_labels = [TF.resize(labels[r], self.size, Image.NEAREST)
+                          for r in range(len(labels))
+                          ]
+
+        # assert resized_labels.shape == (9, 128, 128)
 
         sample = {'image': resized_image, 'labels': resized_labels,
                   'orig': sample['orig'], 'orig_label': sample['orig_label'],
@@ -167,11 +170,19 @@ class RandomAffine(transforms.RandomAffine):
             PIL Image: Affine transformed image.
         """
         img, labels = sample['image'], sample['labels']
+        orig, orig_label = sample['orig'], sample['orig_label']
+
         ret = self.get_params(self.degrees, self.translate, self.scale, self.shear, img.size)
         img = TF.affine(img, *ret, resample=self.resample, fillcolor=self.fillcolor)
         labels = [TF.affine(labels[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
                   for r in range(len(labels))]
-        sample = {'image': img, 'labels': labels, 'orig': sample['orig'], 'orig_label': sample['orig_label'],
+
+        ret_orig = self.get_params(self.degrees, self.translate, self.scale, self.shear, orig.size)
+        orig = TF.affine(img, *ret_orig, resample=self.resample, fillcolor=self.fillcolor)
+        orig_label = [TF.affine(orig_label[r], *ret_orig, resample=self.resample, fillcolor=self.fillcolor)
+                      for r in range(len(orig_label))]
+
+        sample = {'image': img, 'labels': labels, 'orig': orig, 'orig_label': orig_label,
                   'orig_size': sample['orig_size'],
                   'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
         return sample
@@ -240,31 +251,19 @@ class Stage2ToPILImage(object):
 class GaussianNoise(object):
     def __call__(self, sample):
         img = sample['image']
-        img = np.array(img, np.uint8)
-        img = random_noise(img)
+        img = np.array(img).astype(np.uint8)
+        img = np.where(img != 0, random_noise(img), img)
         img = TF.to_pil_image(np.uint8(255 * img))
 
-        orig = sample['orig']
+        orig = np.array(sample['orig']).astype(np.uint8)
+        orig = np.where(orig != 0, random_noise(orig), orig)
+        orig = TF.to_pil_image(np.uint8(255 * orig))
 
-        sample = {'image': img, 'labels': sample['labels'], 'orig': sample['orig'],
+        sample = {'image': img, 'labels': sample['labels'], 'orig': orig,
                   'orig_label': sample['orig_label'], 'parts_gt': sample['parts_gt'],
                   'orig_size': sample['orig_size'],
                   'parts_mask_gt': sample['parts_mask_gt']
                   }
-        return sample
-
-
-class Blurfilter(object):
-    # img: PIL image
-    def __call__(self, sample):
-        img, labels = sample['image'], sample['labels']
-        img = img.filter(ImageFilter.BLUR)
-        sample = {'image': img, 'labels': sample['labels'], 'orig': sample['orig'],
-                  'orig_label': sample['orig_label'], 'parts_gt': sample['parts_gt'],
-                  'orig_size': sample['orig_size'],
-                  'parts_mask_gt': sample['parts_mask_gt']
-                  }
-
         return sample
 
 

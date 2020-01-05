@@ -1,98 +1,63 @@
-import numpy as np
-import random
-import os
-from torch.utils.data import Dataset
-from skimage import io
-from torchvision.transforms import functional as TF
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import torchvision
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import ConcatDataset
 from torchvision import transforms
-import numpy as np
-from PIL import Image, ImageDraw
-import math
-import cv2
-import matplotlib.pyplot as plt
-from preprocess import Resize, GaussianNoise, RandomAffine, Blurfilter, \
+from preprocess import Resize, GaussianNoise, RandomAffine, \
     ToPILImage, ToTensor, Stage2_ToTensor, Stage2_RandomAffine, Stage2_GaussianNoise, Stage2ToPILImage, OrigPad, \
     Stage2_nose_mouth_RandomAffine
 
 
 class Stage1Augmentation(object):
-    def __init__(self, dataset, txt_file, root_dir, resize):
+    def __init__(self, dataset, txt_file, root_dir, parts_root_dir, resize):
         self.augmentation_name = ['origin', 'choice1', 'choice2', 'choice3', 'choice4']
-        # self.augmentation_name = ['origin', 'choice1']
         self.randomchoice = None
         self.transforms = None
         self.transforms_list = None
         self.dataset = dataset
         self.txt_file = txt_file
         self.root_dir = root_dir
+        self.parts_root_dir = parts_root_dir
         self.resize = resize
         self.set_choice()
         self.set_transformers()
         self.set_transforms_list()
 
     def set_choice(self):
+        degree = 15
+        translate_range = (0.1, 0.1)
+        scale_range = (0.9, 1.2)
         choice = {
-            # random_choice 1:  Blur, rotaion, Blur + rotation + scale_translate (random_order)
+            # random_choice 1:
             self.augmentation_name[1]: [GaussianNoise(),
-                                        RandomAffine(degrees=30, translate=(0.5, 0.5),
-                                                     scale=(0.8, 2)),
-                                        transforms.RandomOrder([GaussianNoise(),
-                                                                RandomAffine(degrees=30, translate=(0.5, 0.5),
-                                                                             scale=(0.8, 2))
-                                                                ]
-                                                               )
-                                        ],
-            # random_choice 2:  noise, crop, noise + crop + rotation_scale_translate (random_order)
-            self.augmentation_name[2]: [Blurfilter(),
-                                        RandomAffine(degrees=30, translate=(0.8, 0.8),
-                                                     scale=(0.8, 2)),
-                                        transforms.RandomOrder([Blurfilter(),
-                                                                RandomAffine(degrees=30, translate=(0.5, 0.5),
-                                                                             scale=(0.8, 2))
-                                                                ]
-                                                               )
-                                        ],
-            # random_choice 3:  noise + blur , noise + rotation ,noise + blur + rotation_scale_translate
-            self.augmentation_name[3]: [transforms.RandomOrder([GaussianNoise(),
-                                                                RandomAffine(degrees=30, translate=(0.5, 0.5),
-                                                                             scale=(0.8, 1.8))
-                                                                ]
-                                                               ),
-                                        transforms.RandomOrder([GaussianNoise(),
-                                                                RandomAffine(degrees=15, translate=(0.5, 0.8),
-                                                                             scale=(0.8, 1.8), shear=60)
-                                                                ]
-                                                               ),
-                                        transforms.RandomOrder([GaussianNoise(),
-                                                                Blurfilter(),
-                                                                RandomAffine(degrees=15, translate=(0.8, 0.5),
-                                                                             scale=(0.8, 1.5))
-                                                                ]
-                                                               )
-                                        ],
-            # random_choice 4:  noise + crop , blur + crop ,noise + blur + crop + rotation_scale_translate
-            self.augmentation_name[4]: [transforms.RandomOrder([GaussianNoise(),
-                                                                RandomAffine(degrees=30, translate=(0.8, 0.5),
-                                                                             scale=(0.8, 1.5))]
-                                                               ),
-                                        transforms.Compose([Blurfilter(),
-                                                            RandomAffine(degrees=15, translate=(0.5, 0.8),
-                                                                         scale=(0.8, 1.2))
+                                        RandomAffine(degrees=degree, translate=translate_range,
+                                                     scale=scale_range),
+                                        transforms.Compose([GaussianNoise(),
+                                                            RandomAffine(degrees=degree, translate=translate_range,
+                                                                         scale=scale_range)
                                                             ]
-                                                           ),
-                                        transforms.RandomOrder([GaussianNoise(),
-                                                                Blurfilter(),
-                                                                RandomAffine(degrees=30, translate=(0.5, 0.5),
-                                                                             scale=(0.8, 1))
-                                                                ]
-                                                               )
-                                        ]
+                                                           )
+                                        ],
+            # random_choice 2: R, S, T
+            self.augmentation_name[2]: [
+                RandomAffine(degrees=degree, translate=None,
+                             scale=None),
+                RandomAffine(degrees=0, translate=None,
+                             scale=(0.8, 1.5)),
+                RandomAffine(degrees=0, translate=(0.3, 0.3),
+                             scale=None)
+            ],
+            # random_choice 3:  RT, RS, ST
+            self.augmentation_name[3]: [
+                RandomAffine(degrees=degree, translate=translate_range,
+                             scale=None),
+                RandomAffine(degrees=degree, translate=None,
+                             scale=scale_range),
+                RandomAffine(degrees=0, translate=translate_range,
+                             scale=scale_range),
+            ],
+            # random_choice 4: RST
+            self.augmentation_name[4]: [
+                RandomAffine(degrees=degree, translate=translate_range,
+                             scale=scale_range),
+            ]
         }
         self.randomchoice = choice
 
@@ -149,11 +114,13 @@ class Stage1Augmentation(object):
     def get_dataset(self):
         datasets = {'train': [self.dataset(txt_file=self.txt_file['train'],
                                            root_dir=self.root_dir,
+                                           parts_root_dir=self.parts_root_dir,
                                            transform=self.transforms_list['train'][r]
                                            )
                               for r in self.augmentation_name],
                     'val': self.dataset(txt_file=self.txt_file['val'],
                                         root_dir=self.root_dir,
+                                        parts_root_dir=self.parts_root_dir,
                                         transform=self.transforms_list['val']
                                         )
                     }
