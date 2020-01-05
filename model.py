@@ -111,7 +111,7 @@ class SelectNet_resnet(nn.Module):
         self.model_res.fc = nn.Linear(num_ftrs, 36)  # 6 x 2 x 3
 
     def forward(self, x):
-        out = torch.tanh(self.model_res(x).view(-1, 6, 2, 3))
+        out = self.model_res(x).view(-1, 6, 2, 3)
         assert out.shape == (x.shape[0], 6, 2, 3)
         activate_tensor = torch.tensor([[[1., 0., 1.],
                                          [0., 1., 1.]]], device=x.device,

@@ -10,7 +10,7 @@ from icnnmodel import FaceModel as Stage1Model
 import uuid as uid
 import os
 from torchvision import transforms
-from preprocess import ToTensor, OrigPad, Resize
+from preprocess import ToTensor, OrigPad, Resize, ToPILImage
 from torch.utils.data import DataLoader
 from dataset import HelenDataset
 from model import SelectNet, SelectNet_resnet
@@ -47,20 +47,23 @@ txt_file_names = {
 transforms_list = {
     'train':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ])
 }
@@ -256,12 +259,13 @@ class TrainModel(TemplateModel):
         print('save model at {}'.format(fname))
 
     def load_pretrained(self, model, mode=None):
-        path_modelA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", 'best.pth.tar')
+        # path_modelA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", 'best.pth.tar')
+        path_modelA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/a0d286ea", 'best.pth.tar')
         if mode == 0:
             path_modelB_select_net = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_selectnet/cab2d814",
                                                   'best.pth.tar')
         elif mode == 1:
-            path_modelB_select_net = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_resnet/2a8e078e",
+            path_modelB_select_net = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_resnet/62d4e0ca",
                                                   'best.pth.tar')
 
         if model == 'model1':

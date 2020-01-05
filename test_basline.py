@@ -17,7 +17,8 @@ model1 = FaceModel().to(device)
 model2 = Stage2Model().to(device)
 # load state
 
-path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", "best.pth.tar")
+# path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", "best.pth.tar")
+path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/a0d286ea", "best.pth.tar")
 # path_model1 = os.path.join("/home/yinzi/data3/vimg18/icnn-face/checkpoints", "best.pth.tar")
 path_model2_all = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/79f85a02", "best.pth.tar")
 path_model2_396 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
@@ -50,20 +51,23 @@ txt_file_names = {
 transforms_list = {
     'train':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ])
 }
@@ -110,7 +114,7 @@ for batch in dataloader['test']:
     big_pred = torch.stack(big_pred, dim=0)
     assert big_pred.shape == (N,9,1024,1024)
 
-    cens = torch.floor(calc_centroid(orig_label))
+    cens = torch.floor(calc_centroid(big_pred))
 
     # Test B
     # theta = select_model(label)
@@ -135,7 +139,7 @@ for batch in dataloader['test']:
     for i in range(6):
         parts_grid = torchvision.utils.make_grid(
             parts[:, i].detach().cpu())
-        writer.add_image('croped_parts_%s_%d' % ("testC_1-27", i), parts_grid, step)
+        writer.add_image('11croped_parts_%s_%d' % ("testC_1-27", i), parts_grid, step)
 
     final_pred = affine_mapback(stage2_pred, theta, device)
     final_grid = torchvision.utils.make_grid(final_pred.argmax(dim=1, keepdim=True))

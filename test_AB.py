@@ -1,8 +1,8 @@
-from model import FaceModel, SelectNet
+from model import FaceModel, SelectNet, SelectNet_resnet
 from tensorboardX import SummaryWriter
 from dataset import HelenDataset
 from torchvision import transforms
-from preprocess import ToTensor, OrigPad, Resize
+from preprocess import ToTensor, OrigPad, Resize, ToPILImage
 from torch.utils.data import DataLoader
 from helper_funcs import F1Score, affine_crop
 import torch.nn.functional as F
@@ -15,18 +15,20 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model1 = FaceModel().to(device)
 # model2 = Stage2Model().to(device)
 select_model = SelectNet().to(device)
+select_model_res = SelectNet_resnet().to(device)
 # load state
 # path = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/791288bf4", "best.pth.tar")
 path_B = os.path.join("/home/yinzi/data4/new_train/checkpoints_B/9a95687c", "best.pth.tar")
 path = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", "best.pth.tar")
-path_AB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", 'best.pth.tar')
+# path_AB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", 'best.pth.tar')
+path_AB = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_res/840ea936", 'best.pth.tar')
 state = torch.load(path, map_location=device)
 state_B = torch.load(path_B, map_location=device)
 state_AB = torch.load(path_AB, map_location=device)
 
 model1.load_state_dict(state_AB['model1'])
-select_model.load_state_dict(state_AB['select_net'])
-
+# select_model.load_state_dict(state_AB['select_net'])
+select_model_res.load_state_dict(state_AB['select_net'])
 
 # Dataset and Dataloader
 # Dataset Read_in Part
@@ -42,20 +44,23 @@ txt_file_names = {
 transforms_list = {
     'train':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ])
 }
@@ -83,8 +88,10 @@ for batch in dataloader['test']:
     label = batch['labels'].to(device)
     N,L,H,W = orig_label.shape
 
-    stage1_pred = model1(image)
+    stage1_pred = F.softmax(model1(image), dim=1)
     assert stage1_pred.shape == (N, 9, 128, 128)
+
+    theta = select_model_res(stage1_pred)
 
     # imshow stage1 mask predict
     # stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
@@ -103,5 +110,5 @@ for batch in dataloader['test']:
     assert parts.shape == (N, 6, 3, 81, 81)
     for i in range(6):
         parts_grid = torchvision.utils.make_grid(parts[:, i].detach().cpu())
-        writer.add_image('croped_parts_test2_%d' % i, parts_grid, step)
+        writer.add_image('11croped_parts_test2_%d' % i, parts_grid, step)
 
