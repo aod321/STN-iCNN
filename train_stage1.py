@@ -9,9 +9,10 @@ from icnnmodel import FaceModel as Stage1Model
 import uuid as uid
 import os
 from torchvision import transforms
-from preprocess import ToTensor, OrigPad, Resize
+from preprocess import ToTensor, OrigPad, Resize, ToPILImage
 from torch.utils.data import DataLoader
 from dataset import HelenDataset
+from data_augmentation import Stage1Augmentation
 
 
 uuid = str(uid.uuid1())[0:8]
@@ -20,6 +21,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", default=16, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
 parser.add_argument("--pretrainA", default=0, type=int, help="load pretrain")
+parser.add_argument("--datamore", default=0, type=int, help="enable data augmentation")
 parser.add_argument("--cuda", default=0, type=int, help="Choose GPU with cuda number")
 parser.add_argument("--mode", default='resize', type=str, help="orig, resize")
 parser.add_argument("--lr", default=0.0025, type=float, help="Learning rate for optimizer")
@@ -42,14 +44,16 @@ txt_file_names = {
 transforms_list = {
     'train':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'test':
@@ -68,13 +72,28 @@ Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
                            parts_root_dir=parts_root_dir,
                            transform=transforms_list[x]
                            )
-           for x in ['train', 'val', 'test']
+           for x in ['train', 'val']
            }
 
-dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
-                            shuffle=True, num_workers=4)
-              for x in ['train', 'val', 'test']
-              }
+stage1_augmentation = Stage1Augmentation(dataset=HelenDataset,
+                                         txt_file=txt_file_names,
+                                         root_dir=root_dir,
+                                         parts_root_dir=parts_root_dir,
+                                         resize=(128, 128)
+                                         )
+enhaced_stage1_datasets = stage1_augmentation.get_dataset()
+
+if args.datamore == 0:
+    dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
+                                shuffle=True, num_workers=4)
+                  for x in ['train', 'val']
+                  }
+
+elif args.datamore == 1:
+    dataloader = {x: DataLoader(enhaced_stage1_datasets[x], batch_size=args.batch_size,
+                                shuffle=True, num_workers=4)
+                  for x in ['train', 'val']
+                  }
 
 
 class TrainModel(TemplateModel):
@@ -110,11 +129,11 @@ class TrainModel(TemplateModel):
 
     def train_loss(self, batch):
         x, y = batch['image'].float().to(self.device), batch['labels'].float().to(self.device)
-        orig = batch['orig'].to(self.device)
-        orig_label = batch['orig_label'].to(self.device)
         pred = self.model(x)
         loss = self.criterion(pred, y.argmax(dim=1, keepdim=False))
         if self.args.mode == 'orig':
+            orig = batch['orig'].to(self.device)
+            orig_label = batch['orig_label'].to(self.device)
             pred = self.model(orig)
             loss = self.criterion(pred, orig_label.argmax(dim=1, keepdim=False))
 
@@ -124,11 +143,11 @@ class TrainModel(TemplateModel):
         loss_list = []
         for batch in self.eval_loader:
             x, y = batch['image'].float().to(self.device), batch['labels'].float().to(self.device)
-            orig = batch['orig'].to(self.device)
-            orig_label = batch['orig_label'].to(self.device)
             pred = self.model(x)
             loss = self.criterion(pred, y.argmax(dim=1, keepdim=False))
             if self.args.mode == 'orig':
+                orig = batch['orig'].to(self.device)
+                orig_label = batch['orig_label'].to(self.device)
                 pred = self.model(orig)
                 loss = self.criterion(pred, orig_label.argmax(dim=1, keepdim=False))
             loss_list.append(loss.item())

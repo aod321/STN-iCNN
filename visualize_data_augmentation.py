@@ -63,12 +63,24 @@ def show_stage1():
         step += 1
         image = batch['image'].to(device)
         label = batch['labels'].to(device)
+        orig = batch['orig'].to(device)
+        orig_label = batch['orig_label'].to(device)
         print("step%d" % step)
         image_grid = torchvision.utils.make_grid(image)
         label_grid = torchvision.utils.make_grid(label.argmax(dim=1, keepdim=True))
+
+        orig_grid = torchvision.utils.make_grid(orig)
+        orig_label_grid = torchvision.utils.make_grid(orig_label.argmax(dim=1, keepdim=True))
+
+
         writer.add_image("[Augmentation]Stage1Image_%s" % uuid, image_grid, global_step=step)
         sleep(0.0001)
         writer.add_image("[Augmentation]Stage1Labels_%s" % uuid, label_grid[0], global_step=step,
+                         dataformats='HW')
+        sleep(0.0001)
+        writer.add_image("[Augmentation]Stage1OrigImage_%s" % uuid, orig_grid, global_step=step)
+        sleep(0.0001)
+        writer.add_image("[Augmentation]Stage1OrigLabels_%s" % uuid, orig_label_grid[0], global_step=step,
                          dataformats='HW')
         if step == 20:
             break

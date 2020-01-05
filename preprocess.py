@@ -24,7 +24,6 @@ class Resize(transforms.Resize):
 
         """
         image, labels = sample['image'], sample['labels']
-        parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
         if type(image) is Image.Image:
             image = TF.to_tensor(image)
         resized_image = TF.to_pil_image(F.interpolate(image.unsqueeze(0),
@@ -40,7 +39,7 @@ class Resize(transforms.Resize):
         sample = {'image': resized_image, 'labels': resized_labels,
                   'orig': sample['orig'], 'orig_label': sample['orig_label'],
                   'orig_size': sample['orig_size'],
-                  'parts_gt': parts, 'parts_mask_gt': parts_mask}
+                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
 
         return sample
 
@@ -170,19 +169,13 @@ class RandomAffine(transforms.RandomAffine):
             PIL Image: Affine transformed image.
         """
         img, labels = sample['image'], sample['labels']
-        orig, orig_label = sample['orig'], sample['orig_label']
 
         ret = self.get_params(self.degrees, self.translate, self.scale, self.shear, img.size)
         img = TF.affine(img, *ret, resample=self.resample, fillcolor=self.fillcolor)
         labels = [TF.affine(labels[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
                   for r in range(len(labels))]
 
-        ret_orig = self.get_params(self.degrees, self.translate, self.scale, self.shear, orig.size)
-        orig = TF.affine(img, *ret_orig, resample=self.resample, fillcolor=self.fillcolor)
-        orig_label = [TF.affine(orig_label[r], *ret_orig, resample=self.resample, fillcolor=self.fillcolor)
-                      for r in range(len(orig_label))]
-
-        sample = {'image': img, 'labels': labels, 'orig': orig, 'orig_label': orig_label,
+        sample = {'image': img, 'labels': labels, 'orig': img, 'orig_label': labels,
                   'orig_size': sample['orig_size'],
                   'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
         return sample
@@ -202,21 +195,13 @@ class ToPILImage(object):
                     dict of sample(PIL,List of PIL): Converted image and Labels.
         """
         image, labels = sample['image'], sample['labels']
-        parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
-        orig_label = sample['orig_label']
-        orig = TF.to_pil_image(sample['orig'])
-
-        orig_label = np.uint8(orig_label)
-        orig_label = [TF.to_pil_image(orig_label[r])
-                      for r in range(len(orig_label))]
 
         image = TF.to_pil_image(image)
-
         labels = np.uint8(labels)
         labels = [TF.to_pil_image(labels[i])
                   for i in range(labels.shape[0])]
 
-        sample = {'image': image, 'labels': labels, 'orig': orig, 'orig_label': orig_label,
+        sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels,
                   'orig_size': sample['orig_size'],
                   'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
         return sample
@@ -255,11 +240,7 @@ class GaussianNoise(object):
         img = np.where(img != 0, random_noise(img), img)
         img = TF.to_pil_image(np.uint8(255 * img))
 
-        orig = np.array(sample['orig']).astype(np.uint8)
-        orig = np.where(orig != 0, random_noise(orig), orig)
-        orig = TF.to_pil_image(np.uint8(255 * orig))
-
-        sample = {'image': img, 'labels': sample['labels'], 'orig': orig,
+        sample = {'image': img, 'labels': sample['labels'], 'orig': img,
                   'orig_label': sample['orig_label'], 'parts_gt': sample['parts_gt'],
                   'orig_size': sample['orig_size'],
                   'parts_mask_gt': sample['parts_mask_gt']
