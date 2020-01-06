@@ -23,6 +23,7 @@ select_model = SelectNet().to(device)
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/00ca488c", "best.pth.tar")
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/c8c68e16", "best.pth.tar")
 # pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/ea3c3972", "best.pth.tar")
+# pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/b7d093a2", "best.pth.tar")
 pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/b7d093a2", "best.pth.tar")
 path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", "best.pth.tar")
 

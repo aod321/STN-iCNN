@@ -10,11 +10,11 @@ from icnnmodel import FaceModel as Stage1Model
 import uuid as uid
 import os
 from torchvision import transforms
-from preprocess import ToTensor, OrigPad, Resize
+from preprocess import ToTensor, OrigPad, Resize, ToPILImage
 from torch.utils.data import DataLoader
 from dataset import HelenDataset
 from model import Stage2Model, SelectNet, SelectNet_resnet
-from helper_funcs import affine_crop, F1Score, affine_mapback
+from helper_funcs import affine_crop, F1Score, affine_mapback, stage2_pred_softmax
 import torchvision
 
 uuid = str(uid.uuid1())[0:8]
@@ -49,20 +49,23 @@ txt_file_names = {
 transforms_list = {
     'train':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'val':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ]),
     'test':
         transforms.Compose([
-            ToTensor(),
+            ToPILImage(),
             Resize((128, 128)),
+            ToTensor(),
             OrigPad()
         ])
 }
@@ -249,13 +252,13 @@ class TrainModel(TemplateModel):
         print('save model at {}'.format(fname))
 
     def load_pretrained(self, model, mode=None):
-        path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", 'best.pth.tar')
+        # path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", 'best.pth.tar')
+        path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_res/840ea936", 'best.pth.tar')
         if mode == 0:
-            path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", 'best.pth.tar')
+            path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_custom/122c2032", 'best.pth.tar')
         elif mode == 1:
-            path_select = os.path.join("/home/yinzi/data4/new_train/", 'best.pth.tar')
+            path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_res/840ea936", 'best.pth.tar')
         path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
-
         if model == 'model1':
             fname = path_model1
             state = torch.load(fname, map_location=self.device)
@@ -288,8 +291,8 @@ class TrainModel_F1val(TrainModel):
             self.best_F1 = F1
             self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
         self.save_state(os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
-        self.writer.add_scalar('F1_overall_%s' % uuid, F1, self.epoch)
         print('epoch {}\tF1 {:.3}\terror {:.3}\tbest_F1 {:.3}'.format(self.epoch, F1, error, self.best_F1))
+        self.writer.add_scalar('F1_overall_%s' % uuid, F1, self.epoch)
 
     def eval_F1(self):
         # Reset f1 calc class
@@ -329,14 +332,14 @@ class TrainModel_F1val(TrainModel):
 
             # Predict Cropped Parts
             stage2_pred = self.model2(parts)
-
+            softmax_stage2_pred = stage2_pred_softmax(stage2_pred)
             # Calc stage2 CrossEntropy Loss
             error = []
             for i in range(6):
                 error.append(self.criterion(stage2_pred[i], parts_mask_gt[:, i].long()).item())
 
             # Imshow final predict mask
-            final_pred = affine_mapback(stage2_pred, theta, self.device)
+            final_pred = affine_mapback(softmax_stage2_pred, theta, self.device)
             final_grid = torchvision.utils.make_grid(final_pred.argmax(dim=1, keepdim=True))
             self.writer.add_image("final predict_%s" % uuid, final_grid[0], global_step=self.step_eval, dataformats='HW')
 

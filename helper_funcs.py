@@ -231,7 +231,7 @@ def affine_mapback(preds, theta, device):
     fg = []
     bg = []
     for i in range(6):
-        all_pred = F.softmax(preds[i], dim=1)
+        all_pred = preds[i]
         grid = F.affine_grid(theta=rtheta[:, i], size=[N, preds[i].shape[1], 1024, 1024],
                              align_corners=True).to(device)
         bg_grid = F.affine_grid(theta=rtheta[:, i], size=[N, 1, 1024, 1024], align_corners=True).to(device)
@@ -249,3 +249,15 @@ def affine_mapback(preds, theta, device):
     sample = torch.cat([bg, fg], dim=1)
     assert sample.shape == (N, 9, 1024, 1024)
     return sample
+
+
+def stage2_pred_onehot(stage2_predicts):
+    out = [(F.softmax(stage2_predicts[i], dim=1) > 0.5).float()
+           for i in range(6)]
+    return out
+
+
+def stage2_pred_softmax(stage2_predicts):
+    out = [F.softmax(stage2_predicts[i], dim=1)
+           for i in range(6)]
+    return out
