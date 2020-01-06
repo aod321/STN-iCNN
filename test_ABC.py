@@ -10,7 +10,9 @@ import torchvision
 import torch
 import os
 import uuid as uid
+import torchvision.transforms.functional as TF
 import numpy as np
+from tqdm import tqdm
 
 uuid = str(uid.uuid1())[0:10]
 
@@ -78,56 +80,37 @@ dataloader = {x: DataLoader(Dataset[x], batch_size=10,
               }
 # show predicts
 step = 0
-epochs = 2
-for epoch in range(epochs):
-    f1_class = F1Score(device)
-    f1_all = {x: []
-              for x in f1_class.F1_name_list}
-    f1_overall_all = []
-    for batch in dataloader['test']:
-        step += 1
-        orig = batch['orig'].to(device)
-        orig_label = batch['orig_label'].to(device)
-        image = batch['image'].to(device)
-        label = batch['labels'].to(device)
-        parts_gt = batch['parts_gt'].to(device)
-        N, L, H, W = orig_label.shape
+for batch in dataloader['test']:
+    step += 1
+    orig = batch['orig'].to(device)
+    orig_label = batch['orig_label'].to(device)
+    image = batch['image'].to(device)
+    label = batch['labels'].to(device)
+    parts_gt = batch['parts_gt'].to(device)
+    names = batch['name']
+    orig_size = batch['orig_size']
+    N, L, H, W = orig_label.shape
 
-        stage1_pred = model1(image)
-        assert stage1_pred.shape == (N, 9, 128, 128)
-        theta = select_res_model(F.softmax(stage1_pred, dim=1))
+    stage1_pred = model1(image)
+    assert stage1_pred.shape == (N, 9, 128, 128)
+    theta = select_res_model(F.softmax(stage1_pred, dim=1))
 
-        # cens = calc_centroid(orig_label)
-        # assert cens.shape == (N, 9, 2)
-        parts, parts_labels, _ = affine_crop(orig, orig_label, theta_in=theta, map_location=device)
+    # cens = calc_centroid(orig_label)
+    # assert cens.shape == (N, 9, 2)
+    parts, parts_labels, _ = affine_crop(orig, orig_label, theta_in=theta, map_location=device)
 
-        stage2_pred = model2(parts)
+    stage2_pred = model2(parts)
 
-        softmax_stage2 = stage2_pred_softmax(stage2_pred)
+    softmax_stage2 = stage2_pred_softmax(stage2_pred)
 
-        final_pred = affine_mapback(softmax_stage2, theta, device)
-        f1_class.forward(final_pred, orig_label.argmax(dim=1, keepdim=False))
-
-        for i in range(6):
-            parts_grid = torchvision.utils.make_grid(
-                parts[:, i].detach().cpu())
-            writer.add_image('croped_parts_%s_%d' % (uuid, i), parts_grid, step)
-        for i in range(6):
-            pred_grid = torchvision.utils.make_grid(stage2_pred[i].argmax(dim=1, keepdim=True))
-            writer.add_image('stage2 predict_%s_%d' % (uuid, i), pred_grid[0], global_step=step, dataformats='HW')
-
-        final_grid = torchvision.utils.make_grid(final_pred.argmax(dim=1, keepdim=True))
-        writer.add_image("final predict_%s" % uuid, final_grid[0], global_step=step, dataformats='HW')
-    f1, f1_overall = f1_class.get_f1_score()
-    for x in f1_class.F1_name_list:
-        f1_all[x].append(f1[x])
-    f1_overall_all.append(f1_overall)
-    print("Accumulate %d/%d" % (epoch, epochs - 1))
-
-for x in f1_class.F1_name_list:
-    f1_all[x] = np.mean(f1_all[x])
-    print("{}:{}\t".format(x, f1_all[x]))
-print("{}:{}\t".format("overall", f1_overall_all))
+    final_pred = affine_mapback(softmax_stage2, theta, device)
+    for k in range(final_pred.shape[0]):
+        final_out = TF.to_pil_image(final_pred.argmax(dim=1, keepdim=False).detach().cpu().type(torch.uint8)[k])
+        final_out = TF.center_crop(final_out, orig_size[k].tolist())
+        orig_out = TF.to_pil_image(orig_label.argmax(dim=1, keepdim=False).detach().cpu().type(torch.uint8)[k])
+        orig_out = TF.center_crop(orig_out, orig_size[k].tolist())
+        final_out.save("/home/yinzi/data3/pred_out/%s.png" % names[k], format="PNG", compress_level=0)
+        orig_out.save("/home/yinzi/data3/out_gt/%s.png" % names[k], format="PNG", compress_level=0)
 
 
 
