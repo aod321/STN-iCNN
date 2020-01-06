@@ -175,10 +175,10 @@ class TrainModel(TemplateModel):
             # parts_mask_gt = batch['parts_mask_gt'].to(self.device)
             N, L, H, W = orig_label.shape
 
-            stage1_pred = self.model(image)
+            stage1_pred = F.softmax(self.model(image), dim=1)
             assert stage1_pred.shape == (N, 9, 128, 128)
 
-            theta = self.select_net(F.softmax(stage1_pred, dim=1))
+            theta = self.select_net(stage1_pred)
             assert theta.shape == (N, 6, 2, 3)
             parts, parts_label, _ = affine_crop(img=orig, label=orig_label, theta_in=theta, map_location=self.device)
             assert parts.shape == (N, 6, 3, 81, 81)
@@ -355,8 +355,8 @@ class TrainModel_F1val(TrainModel):
 
 
 def start_train():
-    # train = TrainModel(args)
-    train = TrainModel_F1val(args)
+    train = TrainModel(args)
+    # train = TrainModel_F1val(args)
 
     for epoch in range(args.epochs):
         train.train()
