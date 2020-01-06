@@ -52,7 +52,7 @@ class HelenDataset(Dataset):
         parts, parts_mask = self.getparts(idx)
         orig_size = image.shape
         sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels, 'orig_size': orig_size,
-                  'parts_gt': parts, 'parts_mask_gt': parts_mask}
+                  'parts_gt': parts, 'parts_mask_gt': parts_mask, 'name': img_name}
 
         if self.transform:
             sample = self.transform(sample)

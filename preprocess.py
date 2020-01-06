@@ -38,7 +38,7 @@ class Resize(transforms.Resize):
 
         sample = {'image': resized_image, 'labels': resized_labels,
                   'orig': sample['orig'], 'orig_label': sample['orig_label'],
-                  'orig_size': sample['orig_size'],
+                  'orig_size': sample['orig_size'], 'name': sample['name'],
                   'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
 
         return sample
@@ -77,6 +77,7 @@ class ToTensor(transforms.ToTensor):
 
         sample = {'image': TF.to_tensor(image), 'labels': labels, 'orig': sample['orig'],
                   'orig_label': sample['orig_label'], 'orig_size': sample['orig_size'],
+                  'name': sample['name'],
                   'parts_gt': parts, 'parts_mask_gt': parts_mask}
 
         return sample
@@ -154,7 +155,9 @@ class OrigPad(object):
 
         sample = {'image': image, 'labels': labels, 'orig': pad_orig, 'orig_label': orig_label,
                   'orig_size': orig_size, 'padding': padding,
-                  'parts_gt': parts, 'parts_mask_gt': parts_mask}
+                  'name': sample['name'],
+                  'parts_gt': parts, 'parts_mask_gt': parts_mask,
+                  }
 
         return sample
 
@@ -176,7 +179,7 @@ class RandomAffine(transforms.RandomAffine):
                   for r in range(len(labels))]
 
         sample = {'image': img, 'labels': labels, 'orig': img, 'orig_label': labels,
-                  'orig_size': sample['orig_size'],
+                  'orig_size': sample['orig_size'],'name': sample['name'],
                   'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
         return sample
 
@@ -202,7 +205,7 @@ class ToPILImage(object):
                   for i in range(labels.shape[0])]
 
         sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels,
-                  'orig_size': sample['orig_size'],
+                  'orig_size': sample['orig_size'],'name': sample['name'],
                   'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
         return sample
 
@@ -242,7 +245,7 @@ class GaussianNoise(object):
 
         sample = {'image': img, 'labels': sample['labels'], 'orig': img,
                   'orig_label': sample['orig_label'], 'parts_gt': sample['parts_gt'],
-                  'orig_size': sample['orig_size'],
+                  'orig_size': sample['orig_size'],'name': sample['name'],
                   'parts_mask_gt': sample['parts_mask_gt']
                   }
         return sample

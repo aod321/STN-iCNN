@@ -21,7 +21,8 @@ model2 = Stage2Model().to(device)
 select_model = SelectNet().to(device)
 select_res_model = SelectNet_resnet().to(device)
 
-pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/7a89bbc8", "best.pth.tar")
+# pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/7a89bbc8", "best.pth.tar")
+pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/3cdb9922-3", "best.pth.tar")
 stateABC = torch.load(pathABC, map_location=device)
 
 model1.load_state_dict(stateABC['model1'])
@@ -89,6 +90,7 @@ for epoch in range(epochs):
         orig_label = batch['orig_label'].to(device)
         image = batch['image'].to(device)
         label = batch['labels'].to(device)
+        parts_gt = batch['parts_gt'].to(device)
         N, L, H, W = orig_label.shape
 
         stage1_pred = model1(image)

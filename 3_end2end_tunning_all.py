@@ -13,16 +13,18 @@ from torchvision import transforms
 from preprocess import ToTensor, OrigPad, Resize, ToPILImage
 from torch.utils.data import DataLoader
 from dataset import HelenDataset
+from data_augmentation import Stage1Augmentation
 from model import Stage2Model, SelectNet, SelectNet_resnet
 from helper_funcs import affine_crop, F1Score, affine_mapback, stage2_pred_softmax
 import torchvision
 
-uuid = str(uid.uuid1())[0:8]
+uuid = str(uid.uuid1())[0:10]
 print(uuid)
 parser = argparse.ArgumentParser()
 parser.add_argument("--batch_size", default=10, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
 parser.add_argument("--select_net", default=0, type=int, help="Choose B structure, 0: custom 16 layer, 1: Res-18")
+parser.add_argument("--datamore", default=1, type=int, help="enable data augmentation")
 parser.add_argument("--pretrainA", default=1, type=int, help="Load ModelA pretrain")
 parser.add_argument("--pretrainB", default=1, type=int, help="Load ModelB pretrain")
 parser.add_argument("--pretrainC", default=0, type=int, help="Load ModelC pretrain")
@@ -79,10 +81,26 @@ Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
            for x in ['train', 'val', 'test']
            }
 
-dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
-                            shuffle=True, num_workers=4)
-              for x in ['train', 'val', 'test']
-              }
+stage1_augmentation = Stage1Augmentation(dataset=HelenDataset,
+                                         txt_file=txt_file_names,
+                                         root_dir=root_dir,
+                                         parts_root_dir=parts_root_dir,
+                                         resize=(128, 128)
+                                         )
+enhaced_stage1_datasets = stage1_augmentation.get_dataset()
+
+
+if args.datamore == 0:
+    dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
+                                shuffle=True, num_workers=4)
+                  for x in ['train', 'val']
+                  }
+
+elif args.datamore == 1:
+    dataloader = {x: DataLoader(enhaced_stage1_datasets[x], batch_size=args.batch_size,
+                                shuffle=True, num_workers=4)
+                  for x in ['train', 'val']
+                  }
 
 
 class TrainModel(TemplateModel):
