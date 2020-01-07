@@ -104,6 +104,7 @@ for batch in dataloader['test']:
     softmax_stage2 = stage2_pred_softmax(stage2_pred)
 
     final_pred = affine_mapback(softmax_stage2, theta, device)
+
     for k in range(final_pred.shape[0]):
         final_out = TF.to_pil_image(final_pred.argmax(dim=1, keepdim=False).detach().cpu().type(torch.uint8)[k])
         final_out = TF.center_crop(final_out, orig_size[k].tolist())
