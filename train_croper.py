@@ -15,6 +15,8 @@ import numpy as np
 import os
 from dataset import HelenDataset
 from helper_funcs import calc_centroid
+from prefetch_generator import BackgroundGenerator
+from tqdm import tqdm
 
 uuid_8 = str(uuid.uuid1())[0:8]
 print(uuid_8)
@@ -60,6 +62,11 @@ transforms_list = {
             OrigPad()
         ])
 }
+
+class DataLoaderX(DataLoader):
+    def __iter__(self):
+        return BackgroundGenerator(super().__iter__())
+
 # DataLoader
 Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
                            root_dir=root_dir,
@@ -69,7 +76,7 @@ Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
            for x in ['train', 'val', 'test']
            }
 
-dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
+dataloader = {x: DataLoaderX(Dataset[x], batch_size=args.batch_size,
                             shuffle=True, num_workers=4)
               for x in ['train', 'val', 'test']
               }
@@ -136,7 +143,7 @@ class TrainModel(TemplateModel):
 
     def eval_error(self):
         loss_list = []
-        for batch in self.eval_loader:
+        for batch in tqdm(self.eval_loader):
             image, labels = batch['image'].to(
                 self.device), batch['labels'].to(self.device)
             orig = batch['orig'].to(self.device)
@@ -175,7 +182,7 @@ class TrainModel(TemplateModel):
     def train(self):
         self.model.train()
         self.epoch += 1
-        for i, batch in enumerate(self.train_loader):
+        for i, batch in enumerate(tqdm(self.train_loader)):
             self.step += 1
             self.optimizer.zero_grad()
             loss = self.train_loss(batch)

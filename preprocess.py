@@ -26,19 +26,21 @@ class Resize(transforms.Resize):
         image, labels = sample['image'], sample['labels']
         if type(image) is Image.Image:
             image = TF.to_tensor(image)
-        resized_image = TF.to_pil_image(F.interpolate(image.unsqueeze(0),
-                                                      self.size, mode='bilinear', align_corners=True).squeeze(0)
-                                        )
+        resized_image = F.interpolate(image.unsqueeze(0),
+                                      self.size,
+                                      mode='bilinear',
+                                      align_corners=True).squeeze(0)
 
-        resized_labels = [TF.resize(labels[r], self.size, Image.NEAREST)
+        resized_labels = [F.interpolate(labels[r].unsqueeze(0).unsqueeze(0),
+                                        self.size, mode='nearest').squeeze(0).squeeze(0)
                           for r in range(len(labels))
                           ]
+        resized_labels = torch.stack(resized_labels)
+        assert resized_labels.shape == (9, 128, 128)
 
-        # assert resized_labels.shape == (9, 128, 128)
         sample.update({'image': resized_image, 'labels': resized_labels})
 
         return sample
-
 
 
 class Stage1ToTensor(transforms.ToTensor):
@@ -167,7 +169,7 @@ class OrigPad(object):
 
         """
         image, labels = sample['image'], sample['labels']
-        parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
+        # parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
         orig_label = sample['orig_label']
         orig = sample['orig']
         if type(orig) is not Image.Image:
