@@ -2,7 +2,7 @@ from torch.utils.data import ConcatDataset
 from torchvision import transforms
 from preprocess import Resize, GaussianNoise, RandomAffine, \
     ToPILImage, ToTensor, Stage2_ToTensor, Stage2_RandomAffine, Stage2_GaussianNoise, Stage2ToPILImage, OrigPad, \
-    Stage2_nose_mouth_RandomAffine
+    Stage2_nose_mouth_RandomAffine, Skin_ToTensor, Stage1ToTensor
 
 
 class Stage1Augmentation(object):
@@ -69,37 +69,32 @@ class Stage1Augmentation(object):
             self.augmentation_name[0]: transforms.Compose([
                 ToPILImage(),
                 Resize(self.resize),
-                ToTensor(),
-                OrigPad()
+                Stage1ToTensor()
             ]),
             self.augmentation_name[1]: transforms.Compose([
                 ToPILImage(),
                 # Choose from tranforms_list randomly
                 transforms.RandomChoice(self.randomchoice['choice1']),
                 Resize(self.resize),
-                ToTensor(),
-                OrigPad()
+                Stage1ToTensor()
             ]),
             self.augmentation_name[2]: transforms.Compose([
                 ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice2']),
                 Resize(self.resize),
-                ToTensor(),
-                OrigPad()
+                Stage1ToTensor()
             ]),
             self.augmentation_name[3]: transforms.Compose([
                 ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice3']),
                 Resize(self.resize),
-                ToTensor(),
-                OrigPad()
+                Stage1ToTensor()
             ]),
             self.augmentation_name[4]: transforms.Compose([
                 ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice4']),
                 Resize(self.resize),
-                ToTensor(),
-                OrigPad()
+                Stage1ToTensor()
             ])
         }
 
@@ -115,13 +110,15 @@ class Stage1Augmentation(object):
         datasets = {'train': [self.dataset(txt_file=self.txt_file['train'],
                                            root_dir=self.root_dir,
                                            parts_root_dir=self.parts_root_dir,
-                                           transform=self.transforms_list['train'][r]
+                                           transform=self.transforms_list['train'][r],
+                                           stage='stage1'
                                            )
                               for r in self.augmentation_name],
                     'val': self.dataset(txt_file=self.txt_file['val'],
                                         root_dir=self.root_dir,
                                         parts_root_dir=self.parts_root_dir,
-                                        transform=self.transforms_list['val']
+                                        transform=self.transforms_list['val'],
+                                        stage='stage1'
                                         )
                     }
         enhaced_datasets = {'train': ConcatDataset(datasets['train']),
@@ -276,6 +273,123 @@ class Stage2Augmentation(object):
                 Stage2ToPILImage(),
                 transforms.RandomChoice(self.randomchoice['choice4']),
                 Stage2_ToTensor()
+            ])
+        }
+
+    def set_transforms_list(self):
+        self.transforms_list = {
+            'train':
+                self.transforms,
+            'val':
+                self.transforms['origin']
+        }
+
+    def get_dataset(self):
+        datasets = {'train': [self.dataset(txt_file=self.txt_file['train'],
+                                           root_dir=self.root_dir,
+                                           transform=self.transforms_list['train'][r]
+                                           )
+                              for r in self.augmentation_name],
+                    'val': self.dataset(txt_file=self.txt_file['val'],
+                                        root_dir=self.root_dir,
+                                        transform=self.transforms_list['val']
+                                        )
+                    }
+        enhaced_datasets = {'train': ConcatDataset(datasets['train']),
+                            'val': datasets['val']
+                            }
+
+        return enhaced_datasets
+
+class SkinHairAugmentation(object):
+    def __init__(self, dataset, txt_file, root_dir, resize):
+        self.augmentation_name = ['origin', 'choice1', 'choice2', 'choice3', 'choice4']
+        self.randomchoice = None
+        self.transforms = None
+        self.transforms_list = None
+        self.dataset = dataset
+        self.txt_file = txt_file
+        self.root_dir = root_dir
+        self.resize = resize
+        self.set_choice()
+        self.set_transformers()
+        self.set_transforms_list()
+
+    def set_choice(self):
+        degree = 15
+        translate_range = (0.1, 0.1)
+        scale_range = (0.9, 1.2)
+        choice = {
+            # random_choice 1:
+            self.augmentation_name[1]: [GaussianNoise(),
+                                        RandomAffine(degrees=degree, translate=translate_range,
+                                                     scale=scale_range),
+                                        transforms.Compose([GaussianNoise(),
+                                                            RandomAffine(degrees=degree, translate=translate_range,
+                                                                         scale=scale_range)
+                                                            ]
+                                                           )
+                                        ],
+            # random_choice 2: R, S, T
+            self.augmentation_name[2]: [
+                RandomAffine(degrees=degree, translate=None,
+                             scale=None),
+                RandomAffine(degrees=0, translate=None,
+                             scale=(0.8, 1.5)),
+                RandomAffine(degrees=0, translate=(0.3, 0.3),
+                             scale=None)
+            ],
+            # random_choice 3:  RT, RS, ST
+            self.augmentation_name[3]: [
+                RandomAffine(degrees=degree, translate=translate_range,
+                             scale=None),
+                RandomAffine(degrees=degree, translate=None,
+                             scale=scale_range),
+                RandomAffine(degrees=0, translate=translate_range,
+                             scale=scale_range),
+            ],
+            # random_choice 4: RST
+            self.augmentation_name[4]: [
+                RandomAffine(degrees=degree, translate=translate_range,
+                             scale=scale_range),
+            ]
+        }
+        self.randomchoice = choice
+
+    def set_resize(self, resize):
+        self.resize = resize
+
+    def set_transformers(self):
+        self.transforms = {
+            self.augmentation_name[0]: transforms.Compose([
+                ToPILImage(),
+                Resize(self.resize),
+                Skin_ToTensor()
+            ]),
+            self.augmentation_name[1]: transforms.Compose([
+                ToPILImage(),
+                # Choose from tranforms_list randomly
+                transforms.RandomChoice(self.randomchoice['choice1']),
+                Resize(self.resize),
+                Skin_ToTensor()
+            ]),
+            self.augmentation_name[2]: transforms.Compose([
+                ToPILImage(),
+                transforms.RandomChoice(self.randomchoice['choice2']),
+                Resize(self.resize),
+                Skin_ToTensor()
+            ]),
+            self.augmentation_name[3]: transforms.Compose([
+                ToPILImage(),
+                transforms.RandomChoice(self.randomchoice['choice3']),
+                Resize(self.resize),
+                Skin_ToTensor()
+            ]),
+            self.augmentation_name[4]: transforms.Compose([
+                ToPILImage(),
+                transforms.RandomChoice(self.randomchoice['choice4']),
+                Resize(self.resize),
+                Skin_ToTensor()
             ])
         }
 

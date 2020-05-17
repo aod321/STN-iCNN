@@ -15,7 +15,10 @@ from torch.utils.data import DataLoader
 from dataset import HelenDataset
 from data_augmentation import Stage1Augmentation
 from model import Stage2Model, SelectNet, SelectNet_resnet
-from helper_funcs import affine_crop, F1Score, affine_mapback, stage2_pred_softmax
+from helper_funcs import affine_crop, affine_mapback, stage2_pred_softmax
+from prefetch_generator import BackgroundGenerator
+from tqdm import tqdm
+
 import torchvision
 
 uuid = str(uid.uuid1())[0:10]
@@ -89,18 +92,22 @@ stage1_augmentation = Stage1Augmentation(dataset=HelenDataset,
                                          )
 enhaced_stage1_datasets = stage1_augmentation.get_dataset()
 
+class DataLoaderX(DataLoader):
+    def __iter__(self):
+        return BackgroundGenerator(super().__iter__())
 
 if args.datamore == 0:
-    dataloader = {x: DataLoader(Dataset[x], batch_size=args.batch_size,
+    dataloader = {x: DataLoaderX(Dataset[x], batch_size=args.batch_size,
                                 shuffle=True, num_workers=4)
                   for x in ['train', 'val']
                   }
 
 elif args.datamore == 1:
-    dataloader = {x: DataLoader(enhaced_stage1_datasets[x], batch_size=args.batch_size,
+    dataloader = {x: DataLoaderX(enhaced_stage1_datasets[x], batch_size=args.batch_size,
                                 shuffle=True, num_workers=4)
                   for x in ['train', 'val']
                   }
+
 
 
 class TrainModel(TemplateModel):
@@ -126,7 +133,7 @@ class TrainModel(TemplateModel):
             self.select_net = SelectNet_resnet().to(self.device)
 
         if self.args.pretrainB:
-            self.load_pretrained("select_net", mode = self.args.select_net)
+            self.load_pretrained("select_net", mode=self.args.select_net)
 
         self.model2 = Stage2Model().to(self.device)
         if self.args.pretrainC:
@@ -187,7 +194,7 @@ class TrainModel(TemplateModel):
 
     def eval_error(self):
         loss_list = []
-        for batch in self.eval_loader:
+        for batch in tqdm(self.eval_loader):
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
             orig, orig_label = batch['orig'].to(self.device), batch['orig_label'].to(self.device)
             # parts_mask_gt = batch['parts_mask_gt'].to(self.device)
@@ -215,7 +222,7 @@ class TrainModel(TemplateModel):
         self.model2.train()
         self.select_net.train()
         self.epoch += 1
-        for batch in self.train_loader:
+        for batch in tqdm(self.train_loader):
             self.step += 1
             self.optimizer.zero_grad()
             self.optimizer2.zero_grad()
@@ -297,7 +304,6 @@ class TrainModel(TemplateModel):
 class TrainModel_F1val(TrainModel):
     def __init__(self, arugs):
         super(TrainModel_F1val, self).__init__(arugs)
-        self.f1_class = F1Score(self.device)
         self.best_F1 = float('-Inf')
 
     def eval(self):
@@ -314,8 +320,8 @@ class TrainModel_F1val(TrainModel):
 
     def eval_F1(self):
         # Reset f1 calc class
-        self.f1_class = F1Score(self.device)
-        for batch in self.eval_loader:
+        hist_list = []
+        for batch in tqdm(self.eval_loader):
             self.step_eval += 1
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
             parts_mask_gt = batch['parts_mask_gt'].to(self.device)
@@ -359,22 +365,42 @@ class TrainModel_F1val(TrainModel):
             # Imshow final predict mask
             final_pred = affine_mapback(softmax_stage2_pred, theta, self.device)
             final_grid = torchvision.utils.make_grid(final_pred.argmax(dim=1, keepdim=True))
-            self.writer.add_image("final predict_%s" % uuid, final_grid[0], global_step=self.step_eval, dataformats='HW')
+            self.writer.add_image("final predict_%s" % uuid, final_grid[0], global_step=self.step_eval,
+                                  dataformats='HW')
 
             # Accumulate F1
-            self.f1_class.forward(final_pred, orig_label.argmax(dim=1, keepdim=False))
+            hist = self.fast_histogram(final_pred.argmax(dim=1, keepdim=False),
+                                       orig_label.argmax(dim=1, keepdim=False),
+                                       9, 9)
+            hist_list.append(hist)
 
         # Calc F1 overall
-        _, F1_overall = self.f1_class.get_f1_score()
-
-        # clean f1_class
-        del self.f1_class
+        hist_sum = np.sum(np.stack(hist_list, axis=0), axis=0)
+        A = hist_sum[1:9, :].sum()
+        B = hist_sum[:, 1:9].sum()
+        intersected = hist_sum[1:9, :][:, 1:9].sum()
+        F1_overall = 2 * intersected / (A + B)
         return F1_overall, np.mean(error)
+
+    def fast_histogram(self, a, b, na, nb):
+        '''
+        fast histogram calculation
+        ---
+        * a, b: non negative label ids, a.shape == b.shape, a in [0, ... na-1], b in [0, ..., nb-1]
+        '''
+        assert a.shape == b.shape
+        assert np.all((a >= 0) & (a < na) & (b >= 0) & (b < nb))
+        # k = (a >= 0) & (a < na) & (b >= 0) & (b < nb)
+        hist = np.bincount(
+            nb * a.reshape([-1]).astype(int) + b.reshape([-1]).astype(int),
+            minlength=na * nb).reshape(na, nb)
+        assert np.sum(hist) == a.size
+        return hist
 
 
 def start_train():
-    train = TrainModel(args)
-    # train = TrainModel_F1val(args)
+    # train = TrainModel(args)
+    train = TrainModel_F1val(args)
 
     for epoch in range(args.epochs):
         train.train()

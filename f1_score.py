@@ -42,9 +42,9 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        'gt_dir', help='the directory containing the groundtruth labels (in .png)')
+        '-gt_dir', help='the directory containing the groundtruth labels (in .png)')
     parser.add_argument(
-        'pred_dir', help='the directory containing the prediction labels (names should be the same with groundtruth files)')
+        '-pred_dir', help='the directory containing the prediction labels (names should be the same with groundtruth files)')
     args = parser.parse_args()
 
     label_names_file = './label_names.txt'

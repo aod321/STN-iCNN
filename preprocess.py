@@ -35,12 +35,34 @@ class Resize(transforms.Resize):
                           ]
 
         # assert resized_labels.shape == (9, 128, 128)
+        sample.update({'image': resized_image, 'labels': resized_labels})
 
-        sample = {'image': resized_image, 'labels': resized_labels,
-                  'orig': sample['orig'], 'orig_label': sample['orig_label'],
-                  'orig_size': sample['orig_size'], 'name': sample['name'],
-                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
+        return sample
 
+
+
+class Stage1ToTensor(transforms.ToTensor):
+    """Convert a ``PIL Image`` or ``numpy.ndarray`` to tensor.
+
+         Override the __call__ of transforms.ToTensor
+    """
+
+    def __call__(self, sample):
+        """
+                Args:
+                    dict of pic (PIL Image or numpy.ndarray): Image to be converted to tensor.
+
+                Returns:y
+                    Tensor: Converted image.
+        """
+        image, labels = sample['image'], sample['labels']
+
+        labels = [TF.to_tensor(labels[r])
+                  for r in range(len(labels))
+                  ]
+        labels = torch.cat(labels, dim=0).float()
+
+        sample.update({'image': TF.to_tensor(image), 'labels': labels})
         return sample
 
 
@@ -75,11 +97,8 @@ class ToTensor(transforms.ToTensor):
         assert parts.shape == (6, 3, 81, 81)
         assert parts_mask.shape == (6, 81, 81)
 
-        sample = {'image': TF.to_tensor(image), 'labels': labels, 'orig': sample['orig'],
-                  'orig_label': sample['orig_label'], 'orig_size': sample['orig_size'],
-                  'name': sample['name'],
-                  'parts_gt': parts, 'parts_mask_gt': parts_mask}
-
+        sample.update({'image': TF.to_tensor(image), 'labels': labels, 'parts_gt': parts,
+                       'parts_mask_gt': parts_mask})
         return sample
 
 
@@ -99,13 +118,37 @@ class Stage2_ToTensor(transforms.ToTensor):
         """
         parts, parts_mask = sample['image'], sample['labels']
 
-        parts = torch.stack([TF.to_tensor(parts[r])
+        parts = torch.stack([TF.to_tensor(np.array(parts[r]))
                              for r in range(len(parts))])
 
-        parts_mask = torch.cat([TF.to_tensor(parts_mask[r])
+        parts_mask = torch.cat([TF.to_tensor(np.array(parts_mask[r]))
                                 for r in range(len(parts_mask))])
+        sample.update({'image': parts, 'labels': parts_mask})
 
-        sample = {'image': parts, 'labels': parts_mask}
+        return sample
+
+
+class Skin_ToTensor(transforms.ToTensor):
+    """Convert a ``PIL Image`` or ``numpy.ndarray`` to tensor.
+
+         Override the __call__ of transforms.ToTensor
+    """
+
+    def __call__(self, sample):
+        """
+                Args:
+                    dict of pic (PIL Image or numpy.ndarray): Image to be converted to tensor.
+
+                Returns:y
+                    Tensor: Converted image.
+        """
+        image, labels = sample['image'], sample['labels']
+
+        image = TF.to_tensor(image)
+        labels = torch.cat([TF.to_tensor(labels[r])
+                            for r in range(len(labels))])
+
+        sample = {'image': image, 'labels': labels, 'name': sample['name']}
 
         return sample
 
@@ -153,11 +196,8 @@ class OrigPad(object):
         assert pad_orig.shape == (3, 1024, 1024)
         assert orig_label.shape == (9, 1024, 1024)
 
-        sample = {'image': image, 'labels': labels, 'orig': pad_orig, 'orig_label': orig_label,
-                  'orig_size': orig_size, 'padding': padding,
-                  'name': sample['name'],
-                  'parts_gt': parts, 'parts_mask_gt': parts_mask,
-                  }
+        sample.update({'image': image, 'labels': labels, 'orig': pad_orig, 'orig_label': orig_label,
+                       'orig_size': orig_size, 'padding': padding})
 
         return sample
 
@@ -178,9 +218,7 @@ class RandomAffine(transforms.RandomAffine):
         labels = [TF.affine(labels[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
                   for r in range(len(labels))]
 
-        sample = {'image': img, 'labels': labels, 'orig': img, 'orig_label': labels,
-                  'orig_size': sample['orig_size'],'name': sample['name'],
-                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
+        sample.update({'image': img, 'labels': labels})
         return sample
 
 
@@ -204,9 +242,7 @@ class ToPILImage(object):
         labels = [TF.to_pil_image(labels[i])
                   for i in range(labels.shape[0])]
 
-        sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels,
-                  'orig_size': sample['orig_size'],'name': sample['name'],
-                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
+        sample.update({'image': image, 'labels': labels})
         return sample
 
 
@@ -230,8 +266,7 @@ class Stage2ToPILImage(object):
 
         parts_mask = [TF.to_pil_image(parts_mask[r])
                       for r in range(len(parts_mask))]
-
-        sample = {'image': parts, 'labels': parts_mask}
+        sample.update({'image': parts, 'labels': parts_mask})
 
         return sample
 
@@ -243,11 +278,7 @@ class GaussianNoise(object):
         img = np.where(img != 0, random_noise(img), img)
         img = TF.to_pil_image(np.uint8(255 * img))
 
-        sample = {'image': img, 'labels': sample['labels'], 'orig': img,
-                  'orig_label': sample['orig_label'], 'parts_gt': sample['parts_gt'],
-                  'orig_size': sample['orig_size'],'name': sample['name'],
-                  'parts_mask_gt': sample['parts_mask_gt']
-                  }
+        sample.update({'image': img})
         return sample
 
 
@@ -271,7 +302,7 @@ class Stage2_RandomAffine(transforms.RandomAffine):
             img[r] = new_img[r]
             labels[r] = new_labels[r]
 
-        sample = {'image': img, 'labels': labels}
+        sample.update({'image': img, 'labels': labels})
         return sample
 
 

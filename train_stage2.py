@@ -14,6 +14,8 @@ from model import Stage2Model
 from preprocess import Stage2ToPILImage, Stage2_ToTensor, OldStage2_ToPILImage, OldStage2Resize, OldStage2ToTensor
 from dataset import PartsDataset
 from data_augmentation import Stage2Augmentation
+from prefetch_generator import BackgroundGenerator
+from tqdm import tqdm
 
 import torchvision
 import os
@@ -29,9 +31,10 @@ parser.add_argument("--lr0", default=0.0025, type=float, help="Learning rate for
 parser.add_argument("--lr1", default=0.0025, type=float, help="Learning rate for optimizer")
 parser.add_argument("--lr2", default=0.0025, type=float, help="Learning rate for optimizer")
 parser.add_argument("--lr3", default=0.0025, type=float, help="Learning rate for optimizer")
+parser.add_argument("--datamore", default=0, type=int, help="enable data augmentation")
 parser.add_argument("--momentum", default=0.9, type=float, help="valid when SGD ")
 parser.add_argument("--weight_decay", default=0.001, type=float, help="valid when SGD ")
-parser.add_argument("--cuda", default=0, type=int, help="Choose GPU with cuda number")
+parser.add_argument("--cuda", default=8, type=int, help="Choose GPU with cuda number")
 parser.add_argument("--epochs", default=25, type=int, help="Number of epochs to train")
 parser.add_argument("--eval_per_epoch", default=1, type=int, help="eval_per_epoch ")
 args = parser.parse_args()
@@ -58,6 +61,13 @@ transforms_list = {
             Stage2_ToTensor()
         ])
 }
+
+
+class DataLoaderX(DataLoader):
+    def __iter__(self):
+        return BackgroundGenerator(super().__iter__())
+
+
 # Data Augmentation
 stage2_augmentation = Stage2Augmentation(dataset=PartsDataset,
                                          txt_file=txt_file_names,
@@ -65,17 +75,25 @@ stage2_augmentation = Stage2Augmentation(dataset=PartsDataset,
                                          )
 enhaced_stage2_datasets = stage2_augmentation.get_dataset()
 # DataLoader
-# Dataset = {x: PartsDataset(txt_file=txt_file_names[x],
-#                            root_dir=parts_root_dir,
-#                            transform=transforms_list[x]
-#                            )
-#            for x in ['train', 'val']
-#            }
-#
-dataloader = {x: DataLoader(enhaced_stage2_datasets[x], batch_size=args.batch_size,
-                            shuffle=True, num_workers=4)
-              for x in ['train', 'val']
-              }
+Dataset = {x: PartsDataset(txt_file=txt_file_names[x],
+                           root_dir=parts_root_dir,
+                           transform=transforms_list[x]
+                           )
+           for x in ['train', 'val']
+           }
+
+
+if args.datamore == 0:
+    dataloader = {x: DataLoaderX(Dataset[x], batch_size=args.batch_size,
+                                 shuffle=True, num_workers=4)
+                  for x in ['train', 'val']
+                  }
+
+elif args.datamore == 1:
+    dataloader = {x: DataLoaderX(enhaced_stage2_datasets[x], batch_size=args.batch_size,
+                                 shuffle=True, num_workers=4)
+                  for x in ['train', 'val']
+                  }
 
 
 class TrainModel(TemplateModel):
@@ -140,7 +158,7 @@ class TrainModel(TemplateModel):
 
     def eval_error(self):
         loss_list = []
-        for batch in self.eval_loader:
+        for batch in tqdm(self.eval_loader):
             parts = batch['image'].to(self.device)
             parts_mask = batch['labels'].to(self.device)
             N = parts.shape[0]
@@ -192,7 +210,7 @@ class TrainModel(TemplateModel):
     def train(self):
         self.model.train()
         self.epoch += 1
-        for batch in self.train_loader:
+        for batch in tqdm(self.train_loader):
             self.step += 1
             for i in range(4):
                 self.optimizer[i].zero_grad()
@@ -229,8 +247,90 @@ class TrainModel(TemplateModel):
         return error
 
 
+class TrainModel_accu(TrainModel):
+    def eval(self):
+        self.model.eval()
+        accu, mean_error = self.eval_accu()
+        mean_accu = np.mean(accu)
+
+        if mean_accu > self.best_accu:
+            self.best_accu = mean_accu
+            self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
+        self.save_state(os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
+        self.writer.add_scalar(f'accu_val_{uuid}', mean_accu, self.epoch)
+
+        print('epoch {}\t mean_error {:.3}\t '
+              'lbrow_accu {:.3}\trbrow_accu {:.3}\t'
+              'leye_accu {:.3}\treye_accu {:.3}\t'
+              'nose_accu {:.3}\tmouth_accu {:.3}\t'
+              'mean_accu {:3}\tbest_accu {:.3}'.format(self.epoch, mean_error,
+                                                       accu[0], accu[1],
+                                                       accu[2], accu[3],
+                                                       accu[4], accu[5],
+                                                       mean_accu, self.best_accu))
+        if self.eval_logger:
+            self.eval_logger(self.writer, None)
+
+    def eval_accu(self):
+        label_channels = [2, 2, 2, 2, 2, 4]
+        loss_list = []
+        hist_list = {0: [],
+                     1: [],
+                     2: [],
+                     3: [],
+                     4: [],
+                     5: []}
+        for batch in tqdm(self.eval_loader):
+            parts = batch['image'].to(self.device)
+            parts_mask = batch['labels'].to(self.device)
+            N = parts.shape[0]
+
+            assert parts.shape == (N, 6, 3, 81, 81)
+            assert parts_mask.shape == (N, 6, 81, 81)
+
+            pred = self.model(parts)
+
+            loss = []
+            for i in range(6):
+                pred_arg = pred[i].argmax(dim=1, keepdim=False).cpu().numpy()
+                loss.append(self.criterion(pred[i], parts_mask[:, i].long()))
+                hist_list[i].append(
+                    self.fast_histogram(pred_arg,
+                                        parts_mask[:, i].long().cpu().numpy(),
+                                        label_channels[i], label_channels[i])
+                )
+            loss = torch.stack(loss)
+            loss_list.append(torch.sum(loss).item())
+
+        mean_error = np.mean(loss_list)
+        F1_list = []
+        for i in range(6):
+            hist_sum = np.sum(np.stack(hist_list[i], axis=0), axis=0)
+            A = hist_sum[1:label_channels[i], :].sum()
+            B = hist_sum[:, 1:label_channels[i]].sum()
+            intersected = hist_sum[1:label_channels[i], :][:, 1:label_channels[i]].sum()
+            F1_list.append(2 * intersected / (A + B))
+
+        return F1_list, mean_error
+
+    def fast_histogram(self, a, b, na, nb):
+        '''
+        fast histogram calculation
+        ---
+        * a, b: non negative label ids, a.shape == b.shape, a in [0, ... na-1], b in [0, ..., nb-1]
+        '''
+        assert a.shape == b.shape
+        assert np.all((a >= 0) & (a < na) & (b >= 0) & (b < nb))
+        # k = (a >= 0) & (a < na) & (b >= 0) & (b < nb)
+        hist = np.bincount(
+            nb * a.reshape([-1]).astype(int) + b.reshape([-1]).astype(int),
+            minlength=na * nb).reshape(na, nb)
+        assert np.sum(hist) == a.size
+        return hist
+
+
 def start_train():
-    train = TrainModel(args)
+    train = TrainModel_accu(args)
 
     for epoch in range(args.epochs):
         train.train()
@@ -242,4 +342,5 @@ def start_train():
     print('Done!!!')
 
 
-start_train()
+if __name__ == "__main__":
+    start_train()
