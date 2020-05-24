@@ -4,6 +4,11 @@ from torch.utils.data import Dataset
 from skimage import io
 import cv2
 import torch
+from glob import glob
+import re
+from PIL import Image
+import torch.nn.functional as F
+import torchvision.transforms.functional as TF
 
 
 class HelenDataset(Dataset):
@@ -194,6 +199,88 @@ class PartsDataset(Dataset):
                       for x in name_list]  # (H, W)
 
         sample = {'image': parts, 'labels': parts_mask}
+
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
+
+
+class CelebAMask(Dataset):
+    def __init__(self, root_dir, mode='train', transform=None):
+        self.mode = mode
+        path = os.path.join(root_dir, 'CelebA-HQ-img')
+        self.length = len(glob(os.path.join(path, '*.jpg')))
+        self.image_dir = [os.path.join(path, f'{i}.jpg') for i in range(self.length)]
+        self.img_name = [str(i) for i in range(self.length)]
+
+        if self.mode == 'train':
+            self.image_dir = self.image_dir[:2000]
+        elif self.mode == 'val':
+            self.image_dir = self.image_dir[2000:2200]
+        elif self.mode == 'test':
+            self.image_dir = self.image_dir[2200:2400]
+
+        self.transform = transform
+        self.length = len(self.image_dir)
+        self.label_name = ['r_brow', 'l_brow', 'r_eye', 'l_eye', 'nose', 'u_lip', 'mouth', 'l_lip']
+
+        if self.mode == 'train':
+            self.label_name_list = [["%05d" % i + f"_{self.label_name[k]}"
+                                     for k in range(len(self.label_name))]
+                                    for i in range(self.length)
+                                    ]
+            self.label_dir = [[os.path.join(root_dir, 'CelebAMask-HQ-mask-anno',
+                                            '0',
+                                            self.label_name_list[i][k] + '.png')
+                               for k in range(len(self.label_name))]
+                              for i in range(self.length)
+                              ]
+        elif self.mode == 'val':
+            self.label_name_list = [["%05d" % i + f"_{self.label_name[k]}"
+                                     for k in range(len(self.label_name))]
+                                    for i in list(np.array(range(self.length)) + 2000)
+                                    ]
+            self.label_dir = [[os.path.join(root_dir, 'CelebAMask-HQ-mask-anno',
+                                            '1',
+                                            self.label_name_list[i][k] + '.png')
+                               for k in range(len(self.label_name))]
+                              for i in list(np.array(range(self.length)))
+                              ]
+
+        elif self.mode == 'test':
+            self.label_name_list = [["%05d" % i + f"_{self.label_name[k]}"
+                                     for k in range(len(self.label_name))]
+                                    for i in list(np.array(range(self.length)) + 2200)
+                                    ]
+            self.label_dir = [[os.path.join(root_dir, 'CelebAMask-HQ-mask-anno',
+                                            '1',
+                                            self.label_name_list[i][k] + '.png')
+                               for k in range(len(self.label_name))]
+                              for i in list(np.array(range(self.length)))
+                              ]
+
+    def __len__(self):
+        return len(self.image_dir)
+
+    def __getitem__(self, idx):
+        name = self.img_name[idx]
+        img_path = self.image_dir[idx]
+        labels_path = self.label_dir[idx]
+        image = TF.to_tensor(Image.open(img_path))
+        image = F.interpolate(image.unsqueeze(0),
+                              (512, 512),
+                              mode='bilinear',
+                              align_corners=True).squeeze(0)
+        labels = torch.zeros(8, 512, 512)
+        for i in range(len(self.label_name)):
+            try:
+                labels[i] = TF.to_tensor(Image.open(labels_path[i]))[0]
+            except FileNotFoundError:
+                pass
+                # print(f"WARNNING: {self.label_name[i]} Label Not Found! All zeros for default.")
+        labels = torch.cat([1 - torch.sum(labels, dim=0, keepdim=True), labels], dim=0)
+        # labels = labels.argmax(dim=0, keepdim=False)
+        sample = {'image': image, 'labels': labels, 'name': name, 'orig': image, 'orig_label': labels}
 
         if self.transform:
             sample = self.transform(sample)

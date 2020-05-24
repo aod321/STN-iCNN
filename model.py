@@ -25,12 +25,12 @@ class Stage2Model(nn.Module):
         self.model[3].set_label_channels(4)
 
     def forward(self, parts):
-        eyebrow1_pred = self.model[0](parts[:, 0])
-        eyebrow2_pred = torch.flip(self.model[0](torch.flip(parts[:, 1], [3])), [3])
-        eye1_pred = self.model[1](parts[:, 2])
-        eye2_pred = torch.flip(self.model[1](torch.flip(parts[:, 3], [3])), [3])
-        nose_pred = self.model[2](parts[:, 4])
-        mouth_pred = self.model[3](parts[:, 5])
+        eyebrow1_pred = self.model[0](parts[0])
+        eyebrow2_pred = torch.flip(self.model[0](torch.flip(parts[1], [3])), [3])
+        eye1_pred = self.model[1](parts[2])
+        eye2_pred = torch.flip(self.model[1](torch.flip(parts[3], [3])), [3])
+        nose_pred = self.model[2](parts[4])
+        mouth_pred = self.model[3](parts[5])
         predict = [eyebrow1_pred, eyebrow2_pred,
                    eye1_pred, eye2_pred, nose_pred, mouth_pred]
         return predict

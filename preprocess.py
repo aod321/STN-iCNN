@@ -26,17 +26,20 @@ class Resize(transforms.Resize):
         image, labels = sample['image'], sample['labels']
         if type(image) is Image.Image:
             image = TF.to_tensor(image)
+        if type(labels[0]) is Image.Image:
+            labels = [TF.to_tensor(labels[r]).squeeze(0).squeeze(0)
+                      for r in range(len(labels))]
         resized_image = F.interpolate(image.unsqueeze(0),
                                       self.size,
                                       mode='bilinear',
                                       align_corners=True).squeeze(0)
 
         resized_labels = [F.interpolate(labels[r].unsqueeze(0).unsqueeze(0),
-                                        self.size, mode='nearest').squeeze(0).squeeze(0)
+                                        self.size, mode='nearest').squeeze(0)
                           for r in range(len(labels))
                           ]
-        resized_labels = torch.stack(resized_labels)
-        assert resized_labels.shape == (9, 128, 128)
+        resized_labels = torch.stack(resized_labels).squeeze(1)
+        assert resized_labels.shape == (9, 128, 128), print(resized_labels.shape)
 
         sample.update({'image': resized_image, 'labels': resized_labels})
 
@@ -84,11 +87,13 @@ class ToTensor(transforms.ToTensor):
         """
         image, labels = sample['image'], sample['labels']
         parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
-
-        labels = [TF.to_tensor(labels[r])
-                  for r in range(len(labels))
-                  ]
-        labels = torch.cat(labels, dim=0).float()
+        if type(image) is Image.Image:
+            image = TF.to_tensor(image)
+        if type(labels[0]) is Image.Image:
+            labels = [TF.to_tensor(labels[r])
+                      for r in range(len(labels))
+                      ]
+            labels = torch.cat(labels, dim=0).float()
 
         parts = torch.stack([TF.to_tensor(parts[r])
                              for r in range(len(parts))])
@@ -99,7 +104,7 @@ class ToTensor(transforms.ToTensor):
         assert parts.shape == (6, 3, 81, 81)
         assert parts_mask.shape == (6, 81, 81)
 
-        sample.update({'image': TF.to_tensor(image), 'labels': labels, 'parts_gt': parts,
+        sample.update({'image': image, 'labels': labels, 'parts_gt': parts,
                        'parts_mask_gt': parts_mask})
         return sample
 
