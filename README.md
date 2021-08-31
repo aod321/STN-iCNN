@@ -8,7 +8,7 @@ offical STN-iCNN codes
 
 ## Training
 
-There are three components in our framework in STN-iCNN framework:
+There are three components in STN-iCNN framework:
 
 - modelA: the Stage1 iCNN (global seg)
 
