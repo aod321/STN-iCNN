@@ -15,18 +15,19 @@ from torch.utils.data import DataLoader
 from dataset import HelenDataset
 from data_augmentation import Stage1Augmentation
 from model import Stage2Model, SelectNet, SelectNet_resnet
-from helper_funcs import affine_crop, affine_mapback, stage2_pred_softmax
-from prefetch_generator import BackgroundGenerator
-from tqdm import tqdm
-
+from helper_funcs import affine_crop, F1Accuracy, affine_mapback, stage2_pred_softmax
 import torchvision
+from tqdm import tqdm
+from prefetch_generator import BackgroundGenerator
+import torchvision.transforms.functional as TF
 
 uuid = str(uid.uuid1())[0:10]
 print(uuid)
 parser = argparse.ArgumentParser()
-parser.add_argument("--batch_size", default=10, type=int, help="Batch size to use during training.")
+parser.add_argument("--batch_size", default=32, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
 parser.add_argument("--select_net", default=0, type=int, help="Choose B structure, 0: custom 16 layer, 1: Res-18")
+parser.add_argument("--f1_eval", default=1, type=int, help="using f1_score as eval")
 parser.add_argument("--datamore", default=1, type=int, help="enable data augmentation")
 parser.add_argument("--pretrainA", default=1, type=int, help="Load ModelA pretrain")
 parser.add_argument("--pretrainB", default=1, type=int, help="Load ModelB pretrain")
@@ -75,6 +76,16 @@ transforms_list = {
         ])
 }
 
+class DataLoaderX(DataLoader):
+    def __iter__(self):
+        return BackgroundGenerator(super().__iter__())
+
+batch_size = {
+    'train': args.batch_size,
+    'val': 1,
+    'test': 1
+}
+
 # DataLoader
 Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
                            root_dir=root_dir,
@@ -92,22 +103,21 @@ stage1_augmentation = Stage1Augmentation(dataset=HelenDataset,
                                          )
 enhaced_stage1_datasets = stage1_augmentation.get_dataset()
 
-class DataLoaderX(DataLoader):
-    def __iter__(self):
-        return BackgroundGenerator(super().__iter__())
 
 if args.datamore == 0:
-    dataloader = {x: DataLoaderX(Dataset[x], batch_size=args.batch_size,
+    dataloader = {x: DataLoaderX(Dataset[x], batch_size=batch_size[x],
                                 shuffle=True, num_workers=4)
                   for x in ['train', 'val']
                   }
 
 elif args.datamore == 1:
-    dataloader = {x: DataLoaderX(enhaced_stage1_datasets[x], batch_size=args.batch_size,
+    dataloader = {x: DataLoaderX(enhaced_stage1_datasets[x], batch_size=batch_size[x],
                                 shuffle=True, num_workers=4)
                   for x in ['train', 'val']
                   }
 
+test_loader = DataLoaderX(Dataset['test'], batch_size=1,
+                                shuffle=False, num_workers=4)
 
 
 class TrainModel(TemplateModel):
@@ -133,7 +143,7 @@ class TrainModel(TemplateModel):
             self.select_net = SelectNet_resnet().to(self.device)
 
         if self.args.pretrainB:
-            self.load_pretrained("select_net", mode=self.args.select_net)
+            self.load_pretrained("select_net", mode = self.args.select_net)
 
         self.model2 = Stage2Model().to(self.device)
         if self.args.pretrainC:
@@ -152,6 +162,7 @@ class TrainModel(TemplateModel):
 
         self.train_loader = dataloader['train']
         self.eval_loader = dataloader['val']
+        self.test_loader = test_loader
 
         self.ckpt_dir = "checkpoints_ABC/%s" % uuid
         self.display_freq = args.display_freq
@@ -237,6 +248,7 @@ class TrainModel(TemplateModel):
             if self.step % self.display_freq == 0:
                 self.writer.add_scalar('loss_%s' % uuid, torch.mean(loss).item(), self.step)
                 print('epoch {}\tstep {}\tloss {:.3}'.format(self.epoch, self.step, torch.mean(loss).item()))
+            
 
     def eval(self):
         self.model.eval()
@@ -277,13 +289,12 @@ class TrainModel(TemplateModel):
         print('save model at {}'.format(fname))
 
     def load_pretrained(self, model, mode=None):
-        # path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB/89ce3b06", 'best.pth.tar')
-        path_model1 = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_res/840ea936", 'best.pth.tar')
+        path_model1 = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_AB_res/e0de5954", 'best.pth.tar')
         if mode == 0:
             path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_custom/122c2032", 'best.pth.tar')
         elif mode == 1:
-            path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_res/840ea936", 'best.pth.tar')
-        path_model2 = os.path.join("/home/yinzi/data4/new_train/checkpoints_C/396e4702", "best.pth.tar")
+            path_select = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_AB_res/e0de5954", 'best.pth.tar')
+        path_model2 = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_C/c1f2ab1a", "best.pth.tar")
         if model == 'model1':
             fname = path_model1
             state = torch.load(fname, map_location=self.device)
@@ -304,24 +315,43 @@ class TrainModel(TemplateModel):
 class TrainModel_F1val(TrainModel):
     def __init__(self, arugs):
         super(TrainModel_F1val, self).__init__(arugs)
+        self.f1_class = F1Accuracy(9)
         self.best_F1 = float('-Inf')
+        self.test_best_f1 = float('-Inf')
+        self.test_f1 = F1Accuracy(9)
 
     def eval(self):
         self.model.eval()
         self.model2.eval()
         self.select_net.eval()
-        F1, error = self.eval_F1()
-        if F1 > self.best_F1:
-            self.best_F1 = F1
+        f1_accu, error = self.eval_F1()
+        
+        if f1_accu > self.best_F1:
+            self.best_F1 = f1_accu
             self.save_state(os.path.join(self.ckpt_dir, 'best.pth.tar'), False)
         self.save_state(os.path.join(self.ckpt_dir, '{}.pth.tar'.format(self.epoch)))
-        print('epoch {}\tF1 {:.3}\terror {:.3}\tbest_F1 {:.3}'.format(self.epoch, F1, error, self.best_F1))
-        self.writer.add_scalar('F1_overall_%s' % uuid, F1, self.epoch)
+        print('epoch {}\tF1 {:.3}\terror {:.3}\tbest_F1 {:.3}'.format(self.epoch, f1_accu, error, self.best_F1))
+        self.writer.add_scalar('F1_overall_%s' % uuid, f1_accu, self.epoch)
+        torch.cuda.empty_cache()
+    
+    def test(self):
+        self.model.eval()
+        self.model2.eval()
+        self.select_net.eval()
+        f1_accu, error = self.eval_F1(mode='test')
+        if f1_accu > self.test_best_f1:
+            self.test_best_f1 = f1_accu
+        print('epoch {}\ttest_F1 {:.3}\terror {:.3}\ttest_best_F1 {:.3}'.format(self.epoch, f1_accu, error, self.test_best_f1))
+        self.writer.add_scalar('test_F1_overall_%s' % uuid, f1_accu, self.epoch)
+        torch.cuda.empty_cache()
 
-    def eval_F1(self):
-        # Reset f1 calc class
-        hist_list = []
-        for batch in tqdm(self.eval_loader):
+
+    def eval_F1(self, mode='eval'):
+        data_loader = self.eval_loader
+        if mode == 'test':
+            data_loader = self.test_loader
+        for batch in tqdm(data_loader):
+            names = batch['name']
             self.step_eval += 1
             image, label = batch['image'].to(self.device), batch['labels'].to(self.device)
             parts_mask_gt = batch['parts_mask_gt'].to(self.device)
@@ -332,27 +362,27 @@ class TrainModel_F1val(TrainModel):
             assert stage1_pred.shape == (N, 9, 128, 128)
 
             # Imshow stage1_pred on Tensorborad
-            stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
-            self.writer.add_image("stage1 predict%s" % uuid, stage1_pred_grid[0], self.step_eval, dataformats="HW")
+            # stage1_pred_grid = torchvision.utils.make_grid(stage1_pred.argmax(dim=1, keepdim=True))
+            # self.writer.add_image(f"{mode}_stage1 predict %s" % uuid, stage1_pred_grid[0], self.step_eval, dataformats="HW")
 
             # Mask2Theta using ModelB
             theta = self.select_net(stage1_pred)
             assert theta.shape == (N, 6, 2, 3)
             # AffineCrop
-            parts, parts_label, _ = affine_crop(img=orig, label=orig_label, theta_in=theta, map_location=self.device)
+            parts, _ = affine_crop(img=orig, label=None, theta_in=theta, map_location=self.device)
             assert parts.shape == (N, 6, 3, 81, 81)
 
-            # imshow cropped parts
-            temp = []
-            for i in range(theta.shape[1]):
-                test = theta[:, i]
-                grid = F.affine_grid(theta=test, size=[N, 3, 81, 81], align_corners=True)
-                temp.append(F.grid_sample(input=orig, grid=grid, align_corners=True))
-            parts = torch.stack(temp, dim=1)
-            assert parts.shape == (N, 6, 3, 81, 81)
-            for i in range(6):
-                parts_grid = torchvision.utils.make_grid(parts[:, i].detach().cpu())
-                self.writer.add_image('croped_parts_%s_%d' % (uuid, i), parts_grid, self.step_eval)
+            # # imshow cropped parts
+            # temp = []
+            # for i in range(theta.shape[1]):
+            #     test = theta[:, i]
+            #     grid = F.affine_grid(theta=test, size=[N, 3, 81, 81], align_corners=True)
+            #     temp.append(F.grid_sample(input=orig, grid=grid, align_corners=True))
+            # parts = torch.stack(temp, dim=1)
+            # assert parts.shape == (N, 6, 3, 81, 81)
+            # for i in range(6):
+            #     parts_grid = torchvision.utils.make_grid(parts[:, i].detach().cpu())
+            #     self.writer.add_image(f'{mode}_croped_parts_%s_%d' % (uuid, i), parts_grid, self.step_eval)
 
             # Predict Cropped Parts
             stage2_pred = self.model2(parts)
@@ -364,51 +394,36 @@ class TrainModel_F1val(TrainModel):
 
             # Imshow final predict mask
             final_pred = affine_mapback(softmax_stage2_pred, theta, self.device)
-            final_grid = torchvision.utils.make_grid(final_pred.argmax(dim=1, keepdim=True))
-            self.writer.add_image("final predict_%s" % uuid, final_grid[0], global_step=self.step_eval,
-                                  dataformats='HW')
-
+            # final_grid = torchvision.utils.make_grid(final_pred.argmax(dim=1, keepdim=True))
+            # self.writer.add_image(f"{mode}_final predict_%s" % uuid, final_grid[0], global_step=self.step_eval, dataformats='HW')
             # Accumulate F1
-            hist = self.fast_histogram(final_pred.argmax(dim=1, keepdim=False),
-                                       orig_label.argmax(dim=1, keepdim=False),
-                                       9, 9)
-            hist_list.append(hist)
-
-        # Calc F1 overall
-        hist_sum = np.sum(np.stack(hist_list, axis=0), axis=0)
-        A = hist_sum[1:9, :].sum()
-        B = hist_sum[:, 1:9].sum()
-        intersected = hist_sum[1:9, :][:, 1:9].sum()
-        F1_overall = 2 * intersected / (A + B)
-        return F1_overall, np.mean(error)
-
-    def fast_histogram(self, a, b, na, nb):
-        '''
-        fast histogram calculation
-        ---
-        * a, b: non negative label ids, a.shape == b.shape, a in [0, ... na-1], b in [0, ..., nb-1]
-        '''
-        assert a.shape == b.shape
-        assert np.all((a >= 0) & (a < na) & (b >= 0) & (b < nb))
-        # k = (a >= 0) & (a < na) & (b >= 0) & (b < nb)
-        hist = np.bincount(
-            nb * a.reshape([-1]).astype(int) + b.reshape([-1]).astype(int),
-            minlength=na * nb).reshape(na, nb)
-        assert np.sum(hist) == a.size
-        return hist
+            self.f1_class.collect(final_pred.argmax(dim=1, keepdim=False).detach(), orig_label.argmax(dim=1, keepdim=False).detach())
+        f1_accu = self.f1_class.calc()
+        return f1_accu, np.mean(error)
 
 
 def start_train():
-    # train = TrainModel(args)
-    train = TrainModel_F1val(args)
-
+    if args.f1_eval !=0:
+        train = TrainModel_F1val(args)
+    else:
+        train = TrainModel(args)
     for epoch in range(args.epochs):
+        if epoch == 0:
+            train.eval()
+            try:
+                train.test()
+            except:
+                pass
         train.train()
         train.scheduler.step(epoch)
         train.scheduler2.step(epoch)
         train.scheduler3.step(epoch)
         if (epoch + 1) % args.eval_per_epoch == 0:
             train.eval()
+        try:
+            train.test()
+        except:
+            pass
 
     print('Done!!!')
 

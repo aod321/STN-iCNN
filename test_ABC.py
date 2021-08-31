@@ -13,9 +13,13 @@ import uuid as uid
 import torchvision.transforms.functional as TF
 import numpy as np
 from tqdm import tqdm
-import timeit
 
 uuid = str(uid.uuid1())[0:10]
+
+pred_out = "/home/yinzi/data4/pred_out"
+gt_out = "/home/yinzi/data4/out_gt"
+os.makedirs(pred_out, exist_ok=True)
+os.makedirs(gt_out, exist_ok=True)
 
 writer = SummaryWriter('log')
 device = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
@@ -23,9 +27,13 @@ model1 = FaceModel().to(device)
 model2 = Stage2Model().to(device)
 select_model = SelectNet().to(device)
 select_res_model = SelectNet_resnet().to(device)
+model1.eval()
+select_res_model.eval()
+model2.eval()
 
-# pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/7a89bbc8", "best.pth.tar")
-pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/3cdb9922-3", "best.pth.tar")
+#pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/7a89bbc8", "best.pth.tar")
+pathABC = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_ABC/ea0ac45c-0", "best.pth.tar")
+# pathABC = os.path.join("/home/yinzi/data4/new_train/checkpoints_ABC/3cdb9922-3", "best.pth.tar")
 stateABC = torch.load(pathABC, map_location=device)
 
 model1.load_state_dict(stateABC['model1'])
@@ -75,14 +83,13 @@ Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
            for x in ['train', 'val', 'test']
            }
 
-dataloader = {x: DataLoader(Dataset[x], batch_size=10,
-                            shuffle=False, num_workers=4)
+dataloader = {x: DataLoader(Dataset[x], batch_size=1,
+                            shuffle=False, num_workers=10)
               for x in ['train', 'val', 'test']
               }
 # show predicts
 step = 0
 for batch in dataloader['test']:
-    start = timeit.default_timer()
     step += 1
     orig = batch['orig'].to(device)
     orig_label = batch['orig_label'].to(device)
@@ -106,15 +113,13 @@ for batch in dataloader['test']:
     softmax_stage2 = stage2_pred_softmax(stage2_pred)
 
     final_pred = affine_mapback(softmax_stage2, theta, device)
-    end = timeit.default_timer()
-    print(str(end - start))
+
     for k in range(final_pred.shape[0]):
         final_out = TF.to_pil_image(final_pred.argmax(dim=1, keepdim=False).detach().cpu().type(torch.uint8)[k])
         final_out = TF.center_crop(final_out, orig_size[k].tolist())
         orig_out = TF.to_pil_image(orig_label.argmax(dim=1, keepdim=False).detach().cpu().type(torch.uint8)[k])
         orig_out = TF.center_crop(orig_out, orig_size[k].tolist())
-        final_out.save("/home/yinzi/data3/pred_out/%s.png" % names[k], format="PNG", compress_level=0)
-        orig_out.save("/home/yinzi/data3/out_gt/%s.png" % names[k], format="PNG", compress_level=0)
-
+        final_out.save("/home/yinzi/data4/pred_out/%s.png" % names[k], format="PNG", compress_level=0)
+        orig_out.save("/home/yinzi/data4/out_gt/%s.png" % names[k], format="PNG", compress_level=0)
 
 

@@ -16,7 +16,8 @@ from dataset import HelenDataset
 from model import SelectNet, SelectNet_resnet
 import torchvision
 from helper_funcs import F1Score, calc_centroid, affine_crop, affine_mapback
-from data_augmentation import Stage1Augmentation
+# from data_augmentation import Stage1Augmentation
+from new_data_augmentation import Stage1Augmentation
 from prefetch_generator import BackgroundGenerator
 
 
@@ -278,9 +279,7 @@ class TrainModel(TemplateModel):
 
     def load_pretrained(self, model, mode=None):
         # path_modelA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", 'best.pth.tar')
-        # path_modelA = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_A/48fb8cd4", 'best.pth.tar')
-        # path_modelA = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_A/6ad97412", 'best.pth.tar')
-        path_modelA = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_A/2847f210", 'best.pth.tar')
+        path_modelA = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_A/48fb8cd4", 'best.pth.tar')
         if mode == 0:
             path_modelB_select_net = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_selectnet/cab2d814",
                                                   'best.pth.tar')

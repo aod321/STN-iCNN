@@ -158,10 +158,13 @@ class F1Score(torch.nn.CrossEntropyLoss):
         return self.F1, self.F1_overall
 
 
-def affine_crop(img, label, points=None, theta_in=None, map_location=None, floor=False):
+def affine_crop(img, label=None, pred=None, points=None, theta_in=None, map_location=None, floor=False):
     n, l, h, w = img.shape
     img_in = img.to(map_location)
-    label_in = label.to(map_location)
+    if pred is not None:
+        pred_in = F.interpolate(pred.type_as(img), scale_factor=1024 / 128, mode='bilinear', align_corners=True)
+        assert pred_in.shape == (n, 9, 1024, 1024)
+
     if points is not None:
         theta = torch.zeros((n, 6, 2, 3), dtype=torch.float32, device=map_location, requires_grad=False)
         points_in = points.to(map_location)
@@ -179,44 +182,57 @@ def affine_crop(img, label, points=None, theta_in=None, map_location=None, floor
     elif theta_in is not None:
         theta = theta_in
     assert theta.shape == (n, 6, 2, 3)
-
     samples = []
     for i in range(6):
-        grid = F.affine_grid(theta[:, i], [n, 3, 81, 81], align_corners=True).to(map_location)
+        grid = F.affine_grid(theta[:, i], [n, 3, 81, 81], align_corners=True).type_as(theta)
         samples.append(F.grid_sample(input=img_in, grid=grid, align_corners=True,
                                      mode='bilinear', padding_mode='zeros'))
     samples = torch.stack(samples, dim=1)
+    assert samples.shape == (n, 6, 3, 81, 81)
+    if label is not None:
+        label_in = label.to(map_location)
+        labels_sample = crop_labels(label_in, theta)
+        """
+        Shape of Parts
+        torch.size(N, 6, 3, 81, 81)
+        Shape of Labels
+        List: [5x[torch.size(N, 2, 81, 81)], 1x [torch.size(N, 4, 81, 81)]]
+        """
+        if pred is not None:
+            pred_sample = crop_labels(pred_in, theta)
+            return samples, labels_sample, pred_sample, theta
+        else:
+            return samples, labels_sample, theta
+    else:
+        return samples, theta
+    
+    
+def crop_labels(label_in, theta):
+    n = theta.shape[0]
     temp = []
     labels_sample = []
-
     # Not-mouth Labels
     for i in range(1, 6):
-        grid = F.affine_grid(theta[:, i - 1], [n, 1, 81, 81], align_corners=True).to(map_location)
+        grid = F.affine_grid(theta[:, i - 1], [n, 1, 81, 81], align_corners=True).type_as(theta)
         temp.append(F.grid_sample(input=label_in[:, i:i + 1], grid=grid,
                                   mode='nearest', padding_mode='zeros', align_corners=True))
     for i in range(5):
-        bg = torch.tensor(1., device=map_location, requires_grad=False) - temp[i]
+        bg = torch.tensor(1., device=theta.device, requires_grad=False) - temp[i]
         labels_sample.append(torch.cat([bg, temp[i]], dim=1))
 
     temp = []
     # Mouth Labels
     for i in range(6, 9):
-        grid = F.affine_grid(theta[:, 5], [n, 1, 81, 81], align_corners=True).to(map_location)
+        grid = F.affine_grid(theta[:, 5], [n, 1, 81, 81], align_corners=True).type_as(theta)
         temp.append(F.grid_sample(input=label_in[:, i:i + 1], grid=grid, align_corners=True,
                                   mode='nearest', padding_mode='zeros'))
     temp = torch.cat(temp, dim=1)
     assert temp.shape == (n, 3, 81, 81)
-    bg = torch.tensor(1., device=map_location, requires_grad=False) - temp.sum(dim=1, keepdim=True)
+    bg = torch.tensor(1., device=theta.device, requires_grad=False) - temp.sum(dim=1, keepdim=True)
 
     labels_sample.append(torch.cat([bg, temp], dim=1))
-    """
-    Shape of Parts
-    torch.size(N, 6, 3, 81, 81)
-    Shape of Labels
-    List: [5x[torch.size(N, 2, 81, 81)], 1x [torch.size(N, 4, 81, 81)]]
-    """
-    assert samples.shape == (n, 6, 3, 81, 81)
-    return samples, labels_sample, theta
+
+    return labels_sample
 
 
 def affine_mapback(preds, theta, device):
@@ -237,7 +253,7 @@ def affine_mapback(preds, theta, device):
         bg_grid = F.affine_grid(theta=rtheta[:, i], size=[N, 1, 1024, 1024], align_corners=True).to(device)
         temp = F.grid_sample(input=all_pred, grid=grid, mode='nearest', padding_mode='zeros',
                              align_corners=True)
-        temp2 = F.grid_sample(input=all_pred[:, 0:1], grid=bg_grid, mode='nearest', padding_mode='border',
+        temp2 = 1 - F.grid_sample(input=1 - all_pred[:, 0:1], grid=bg_grid, mode='nearest', padding_mode='zeros',
                               align_corners=True)
         bg.append(temp2)
         fg.append(temp[:, 1:])
@@ -261,3 +277,42 @@ def stage2_pred_softmax(stage2_predicts):
     out = [F.softmax(stage2_predicts[i], dim=1)
            for i in range(6)]
     return out
+
+
+class F1Accuracy(object):
+    def __init__(self, num=2):
+        super(F1Accuracy, self).__init__()
+        self.hist_list = []
+        self.num = num
+
+    def fast_histogram(self, a, b, na, nb):
+        '''
+        fast histogram calculation
+        ---
+        * a, b: non negative label ids, a.shape == b.shape, a in [0, ... na-1], b in [0, ..., nb-1]
+        '''
+        assert a.shape == b.shape, (a.shape, b.shape)
+        assert np.all((a >= 0) & (a < na) & (b >= 0) & (b < nb))
+        # k = (a >= 0) & (a < na) & (b >= 0) & (b < nb)
+        hist = np.bincount(
+            nb * a.reshape([-1]).astype(int) + b.reshape([-1]).astype(int),
+            minlength=na * nb).reshape(na, nb)
+        assert np.sum(hist) == a.size
+        return hist
+
+    def collect(self, input, target):
+        hist = self.fast_histogram(input.cpu().numpy(), target.cpu().numpy(),
+                                   self.num, self.num)
+        self.hist_list.append(hist)
+
+    def calc(self):
+        if self.hist_list:
+            hist_sum = np.sum(np.stack(self.hist_list, axis=0), axis=0)
+            A = hist_sum[1:self.num, :].sum()
+            B = hist_sum[:, 1:self.num].sum()
+            intersected = hist_sum[1:self.num, :][:, 1:self.num].sum()
+            F1 = 2 * intersected / (A + B)
+            self.hist_list.clear()
+            return F1
+        else:
+            raise RuntimeError('No datas')
