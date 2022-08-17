@@ -64,6 +64,9 @@ class HelenDataset(Dataset):
             new_label[0] = 1. - new_label_fg
             sample['labels'] = new_label
         return sample
+    
+    def get_name(self, idx):
+        return self.name_list[idx, 1].strip()
 
     def getparts(self, idx):
         name = self.name_list[idx, 1].strip()
