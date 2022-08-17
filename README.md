@@ -6,6 +6,18 @@ offical STN-iCNN codes
 
 [TOC]
 
+## Dataset
+### Stage1 Dataset
+1. ![Download](http://pages.cs.wisc.edu/~lizhang/projects/face-parsing/SmithCVPR2013_dataset_resized.zip) Smith et al. Resized HelenDataset 
+2. Unzip it into a folder (./data for example)
+
+### Stage2 Dataset
+```shell
+python3 crop.py --root_dir {stage1_dataset_path} --save_dir {path_for_save_data}
+# for example
+# python3 crop.py --root_dir ./datas --save_dir ./recroped_parts
+```
+
 ## Training
 
 There are three components in STN-iCNN framework:
