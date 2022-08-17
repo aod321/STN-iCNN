@@ -38,7 +38,7 @@ There are three components in STN-iCNN framework:
 ### Train modelA
 
 ```shell
-python3 train_stage1.py --cuda 0 --datamore 1 --lr 0.0009
+python3 train_stage1.py --stage1_dataset /home/user/data --cuda 0 --datamore 1 --lr 0.0009
 ```
 The best training file will be found in checkpointsA/{this training uuid}/best.pth.tar
 
