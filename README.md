@@ -6,6 +6,10 @@ offical STN-iCNN codes
 
 [TOC]
 
+
+## Requirements
+Ubuntu 20.04, torch==1.8.2, torchvision==0.9.2
+
 ## Dataset
 ### Stage1 Dataset
 1. ![Download](http://pages.cs.wisc.edu/~lizhang/projects/face-parsing/SmithCVPR2013_dataset_resized.zip) Smith et al. Resized HelenDataset 
@@ -48,16 +52,12 @@ The f1 overall for modelA seg result is:
 
 ### Train modelA+B (facial parts cropper)
 
-change the path_modelA to yours at the line 282 in 2_tuning_cropper_model1.py:
+change the path_modelA to yours
 
-```
-path_modelA = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_A/48fb8cd4", 'best.pth.tar')
-```
-
-the run training:
+then run training:
 
 ```shell
-python3 2_tuning_cropper_model1.py --pretrainA 1 --pretrainB 0 --select_net 1 --lr 0 --lr_s 0.0008 --cuda 7 --batch_size 32 --epochs 3000
+python3 2_tuning_cropper_model1.py --stage1_dataset /home/user/data --stage2_dataset /home/user/recroped_parts --pathmodelA /home/user/48fb8cd4.pth.tar --pretrainA 1 --pretrainB 0 --select_net 1 --lr 0 --lr_s 0.0008 --cuda 7 --batch_size 32 --epochs 3000
 ```
 
 The best training file will be found in checkpointsAB_res/{this training uuid}/best.pth.tar
@@ -76,7 +76,7 @@ best_error 1.53e-05
 ### Train modelC (the model for facial parts segmentation)
 
 ```shell
-python3 train_stage2.py --batch_size 64 --cuda 6 --lr0 0.0008 --lr1 0.0008 --lr2 0.0008 --lr3 0.0008 --epochs 3000
+python3 train_stage2.py --stage1_dataset /home/user/data --stage2_dataset /home/user/recroped_parts --batch_size 64 --cuda 6 --lr0 0.0008 --lr1 0.0008 --lr2 0.0008 --lr3 0.0008 --epochs 3000
 ```
 
 Our trainning results are:
@@ -90,10 +90,10 @@ best_error_all 0.245
 
 ### End2End finetuning
 
-Change the path for checkpoint e0de5954 and checkpoint c1f2ab1a at line 291 in the 3_end2end_tunning_all.py, then run
+Change the path for checkpoint e0de5954 and checkpoint c1f2ab1a
 
 ```shell
-python3 3_end2end_tunning_all.py --batch_size 32 --cuda 8 --select_net 1 --pretrainA 1 --pretrainB 1 --pretrainC 0 --lr 0 --lr2 0.0025 --lr_s 0 --epoch 3000 --f1_eval 1
+python3 3_end2end_tunning_all.py --stage1_dataset /home/user/data --stage2_dataset /home/user/recroped_parts --pathmodel1 /home/user/e0de5954.pth.tar --pathmodel_select /home/user/e0de5954.pth.tar --pathmodel2 /home/user/c1f2ab1a.pth.tar --batch_size 32 --cuda 8 --select_net 1 --pretrainA 1 --pretrainB 1 --pretrainC 0 --lr 0 --lr2 0.0025 --lr_s 0 --epoch 3000 --f1_eval 1
 ```
 
 Our trainning results are:

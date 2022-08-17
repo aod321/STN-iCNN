@@ -56,7 +56,7 @@ class HelenDataset(Dataset):
         else:
             sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels, 'orig_size': orig_size,
                         'name': img_name, 'index': idx}
-            
+                
         if self.transform:
             sample = self.transform(sample)
             new_label = sample['labels']

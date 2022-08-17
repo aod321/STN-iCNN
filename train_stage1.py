@@ -9,22 +9,25 @@ from icnnmodel import FaceModel as Stage1Model
 import uuid as uid
 import os
 from torchvision import transforms
-from preprocess import Stage1ToTensor, Resize, ToPILImage
+from preprocess import ToTensor, Resize, ToPILImage, OrigPad
 from torch.utils.data import DataLoader
 from dataset import HelenDataset
 from data_augmentation import Stage1Augmentation
 from prefetch_generator import BackgroundGenerator
+# from focal_loss import FocalLoss
 from tqdm import tqdm
 
 uuid = str(uid.uuid1())[0:8]
 print(uuid)
 parser = argparse.ArgumentParser()
+parser.add_argument("--stage1_dataset", type=str, help="Path for stage1 dataset")
+# parser.add_argument("--stage2_dataset", type=str, help="Path for stage2 dataset")
 parser.add_argument("--batch_size", default=16, type=int, help="Batch size to use during training.")
 parser.add_argument("--size", default=128, type=int, help="Input size")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
 parser.add_argument("--pretrainA", default=0, type=int, help="load pretrain")
-parser.add_argument("--datamore", default=0, type=int, help="enable data augmentation")
-parser.add_argument("--cuda", default=0, type=int, help="Choose GPU with cuda number")
+parser.add_argument("--datamore", default=1, type=int, help="enable data augmentation")
+parser.add_argument("--cuda", default=2, type=int, help="Choose GPU with cuda number")
 parser.add_argument("--mode", default='resize', type=str, help="orig, resize")
 parser.add_argument("--lr", default=0.0025, type=float, help="Learning rate for optimizer")
 parser.add_argument("--epochs", default=25, type=int, help="Number of epochs to train")
@@ -34,8 +37,10 @@ print(args)
 
 # Dataset and Dataloader
 # Dataset Read_in Part
-root_dir = "/data1/yinzi/datas"
-parts_root_dir = "/home/yinzi/data3/recroped_parts"
+# root_dir = /home/user/data
+root_dir = args.stage1_dataset
+# parts_root_dir= /home/user/recroped_parts
+# parts_root_dir = args.stage2_dataset
 
 txt_file_names = {
     'train': "exemplars.txt",
@@ -48,17 +53,20 @@ transforms_list = {
         transforms.Compose([
             ToPILImage(),
             Resize((args.size, args.size)),
-            Stage1ToTensor()
+            ToTensor(),
+            OrigPad()
         ]),
     'val':
         transforms.Compose([
             ToPILImage(),
             Resize((args.size, args.size)),
-            Stage1ToTensor()
+            ToTensor(),
+            OrigPad()
         ]),
     'test':
         transforms.Compose([
-            Stage1ToTensor()
+            ToTensor(),
+            OrigPad()
         ])
 }
 
@@ -71,9 +79,8 @@ class DataLoaderX(DataLoader):
 # DataLoader
 Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
                            root_dir=root_dir,
-                           parts_root_dir=parts_root_dir,
-                           transform=transforms_list[x],
-                           stage='stage1'
+                           parts_root_dir=None,
+                           transform=transforms_list[x]
                            )
            for x in ['train', 'val']
            }
@@ -81,7 +88,7 @@ Dataset = {x: HelenDataset(txt_file=txt_file_names[x],
 stage1_augmentation = Stage1Augmentation(dataset=HelenDataset,
                                          txt_file=txt_file_names,
                                          root_dir=root_dir,
-                                         parts_root_dir=parts_root_dir,
+                                         parts_root_dir=None,
                                          resize=(args.size, args.size)
                                          )
 enhaced_stage1_datasets = stage1_augmentation.get_dataset()
@@ -118,6 +125,7 @@ class TrainModel(TemplateModel):
             self.model.load_state_dict(state_A['model1'])
         self.optimizer = optim.Adam(self.model.parameters(), self.args.lr)
         self.criterion = nn.CrossEntropyLoss()
+        # self.criterion = FocalLoss(gamma=2, reduction='mean')
         self.metric = nn.CrossEntropyLoss()
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=5, gamma=0.5)
 
@@ -285,7 +293,7 @@ def start_train():
 
     for epoch in range(args.epochs):
         train.train()
-        train.scheduler.step(epoch)
+        train.scheduler.step()
         if (epoch + 1) % args.eval_per_epoch == 0:
             train.eval()
 

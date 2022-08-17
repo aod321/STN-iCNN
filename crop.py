@@ -153,6 +153,7 @@ def crop(mode='train'):
                 print(final_label_path)
                 img_t.save(final_img_path, format="PNG", compress_level=0)  # Save cropped image without any compress
                 label_t.save(final_label_path, format="PNG", compress_level=0)
+    os.system(f"cp {root_dir}/*.txt {save_dir}")
     print("Crop Data for %s Done! ^_^" % mode)
 
 

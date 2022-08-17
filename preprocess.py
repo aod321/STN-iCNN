@@ -2,6 +2,7 @@ import torch
 import torch.nn
 from torchvision import transforms
 from torchvision.transforms import functional as TF
+from torchvision.transforms import InterpolationMode
 import cv2
 import numpy as np
 from skimage.util import random_noise
@@ -108,17 +109,18 @@ class Resize(transforms.Resize):
                                                       self.size, mode='bilinear', align_corners=True).squeeze(0)
                                         )
 
-        resized_labels = [TF.resize(labels[r], self.size, Image.NEAREST)
+        resized_labels = [TF.resize(labels[r], self.size, interpolation=InterpolationMode.NEAREST)
                           for r in range(len(labels))
                           ]
 
         # assert resized_labels.shape == (9, 128, 128)
-
-        sample = {'image': resized_image, 'labels': resized_labels,
-                  'orig': sample['orig'], 'orig_label': sample['orig_label'],
-                  'orig_size': sample['orig_size'], 'name': sample['name'],
-                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
-
+        try:
+            sample.update({'image': resized_image, 'labels': resized_labels,
+                    'orig': sample['orig'], 'orig_label': sample['orig_label'],
+                    'orig_size': sample['orig_size'], 'name': sample['name'],
+                    'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']})
+        except KeyError:
+            sample.update({'image': resized_image, 'labels': resized_labels})
         return sample
 
 
@@ -153,7 +155,7 @@ class ToTensor(transforms.ToTensor):
             assert parts.shape == (6, 3, 81, 81)
             assert parts_mask.shape == (6, 81, 81)
             sample.update({'image': TF.to_tensor(image), 'labels': labels, 'parts_gt': parts, 'parts_mask_gt': parts_mask})
-        except:
+        except KeyError:
             sample.update({'image': TF.to_tensor(image), 'labels': labels})
         return sample
 
@@ -199,7 +201,6 @@ class OrigPad(object):
 
         """
         image, labels = sample['image'], sample['labels']
-        parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
         orig_label = sample['orig_label']
         orig = sample['orig']
         if type(orig) is not Image.Image:
@@ -227,12 +228,7 @@ class OrigPad(object):
 
         assert pad_orig.shape == (3, 1024, 1024)
         assert orig_label.shape == (9, 1024, 1024)
-
-        sample = {'image': image, 'labels': labels, 'orig': pad_orig, 'orig_label': orig_label,
-                  'orig_size': orig_size, 'padding': padding,
-                  'name': sample['name'],
-                  'parts_gt': parts, 'parts_mask_gt': parts_mask,
-                  }
+        sample.update({'orig': pad_orig, 'orig_label': orig_label, 'orig_size': orig_size, 'padding': padding})
 
         return sample
 
@@ -249,13 +245,15 @@ class RandomAffine(transforms.RandomAffine):
         img, labels = sample['image'], sample['labels']
 
         ret = self.get_params(self.degrees, self.translate, self.scale, self.shear, img.size)
-        img = TF.affine(img, *ret, resample=self.resample, fillcolor=self.fillcolor)
-        labels = [TF.affine(labels[r], *ret, resample=self.resample, fillcolor=self.fillcolor)
+        img = TF.affine(img, *ret)
+        labels = [TF.affine(labels[r], *ret)
                   for r in range(len(labels))]
-
-        sample = {'image': img, 'labels': labels, 'orig': img, 'orig_label': labels,
-                  'orig_size': sample['orig_size'],'name': sample['name'],
-                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
+        try:
+            sample.update({'image': img, 'labels': labels, 'orig': img, 'orig_label': labels,
+                    'orig_size': sample['orig_size'],'name': sample['name'],
+                    'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']})
+        except KeyError:
+            sample.update({'image': img, 'labels': labels})
         return sample
 
 
@@ -273,16 +271,23 @@ class ToPILImage(object):
                     dict of sample(PIL,List of PIL): Converted image and Labels.
         """
         image, labels = sample['image'], sample['labels']
-
         image = TF.to_pil_image(image)
         if type(labels) is not torch.Tensor:
             labels = np.uint8(labels)
         labels = [TF.to_pil_image(labels[i])
                   for i in range(labels.shape[0])]
 
-        sample = {'image': image, 'labels': labels, 'orig': image, 'orig_label': labels,
+        try:
+            parts, parts_mask = sample['parts_gt'], sample['parts_mask_gt']
+            orig_size = sample['orig_size']
+            name = sample['name']
+            orig = sample['orig']
+            orig_label = sample['orig_label']
+            sample.update({'image': image, 'labels': labels, 'orig': image, 'orig_label': labels,
                   'orig_size': sample['orig_size'],'name': sample['name'],
-                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']}
+                  'parts_gt': sample['parts_gt'], 'parts_mask_gt': sample['parts_mask_gt']})
+        except KeyError:
+            sample.update({'image': image, 'labels': labels})
         return sample
 
 
@@ -319,11 +324,14 @@ class GaussianNoise(object):
         img = np.where(img != 0, random_noise(img), img)
         img = TF.to_pil_image(np.uint8(255 * img))
 
-        sample = {'image': img, 'labels': sample['labels'], 'orig': img,
-                  'orig_label': sample['orig_label'], 'parts_gt': sample['parts_gt'],
-                  'orig_size': sample['orig_size'],'name': sample['name'],
-                  'parts_mask_gt': sample['parts_mask_gt']
-                  }
+        try:
+            sample.update({'image': img, 'labels': sample['labels'], 'orig': img,
+                    'orig_label': sample['orig_label'], 'parts_gt': sample['parts_gt'],
+                    'orig_size': sample['orig_size'],'name': sample['name'],
+                    'parts_mask_gt': sample['parts_mask_gt']
+                    })
+        except KeyError:
+            sample.update({"image": img})
         return sample
 
 
@@ -339,9 +347,9 @@ class Stage2_RandomAffine(transforms.RandomAffine):
         img, labels = sample['image'], sample['labels']
         ret = [self.get_params(self.degrees, self.translate, self.scale, self.shear, img[r].size)
                for r in range(4)]
-        new_img = [TF.affine(img[r], *ret[r], resample=self.resample, fillcolor=self.fillcolor)
+        new_img = [TF.affine(img[r], *ret[r])
                    for r in range(4)]
-        new_labels = [TF.affine(labels[r], *ret[r], resample=self.resample, fillcolor=self.fillcolor)
+        new_labels = [TF.affine(labels[r], *ret[r])
                       for r in range(4)]
         for r in range(4):
             img[r] = new_img[r]
@@ -363,9 +371,9 @@ class Stage2_nose_mouth_RandomAffine(transforms.RandomAffine):
         img, labels = sample['image'], sample['labels']
         ret = {r: self.get_params(self.degrees, self.translate, self.scale, self.shear, img[r].size)
                for r in range(4, 6)}
-        new_part = [TF.affine(img[r], *ret[r], resample=self.resample, fillcolor=self.fillcolor)
+        new_part = [TF.affine(img[r], *ret[r])
                     for r in range(4, 6)]
-        new_labels = [TF.affine(labels[r], *ret[r], resample=self.resample, fillcolor=self.fillcolor)
+        new_labels = [TF.affine(labels[r], *ret[r])
                       for r in range(4, 6)]
         for r in range(4, 6):
             img[r] = new_part[r - 4]
@@ -409,7 +417,7 @@ class OldStage2Resize(transforms.Resize):
         image, labels = sample['image'], sample['labels']
         resized_image = np.array([cv2.resize(image[i], self.size, interpolation=cv2.INTER_AREA)
                                   for i in range(len(image))])
-        labels = {x: np.array([np.array(TF.resize(TF.to_pil_image(labels[x][r]), self.size, Image.ANTIALIAS))
+        labels = {x: np.array([np.array(TF.resize(TF.to_pil_image(labels[x][r]), self.size,interpolation=InterpolationMode.NEAREST))
                                for r in range(len(labels[x]))])
                   for x in name_list
                   }

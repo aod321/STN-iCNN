@@ -24,9 +24,14 @@ import torchvision.transforms.functional as TF
 uuid = str(uid.uuid1())[0:10]
 print(uuid)
 parser = argparse.ArgumentParser()
+parser.add_argument("--stage1_dataset", type=str, help="Path for stage1 dataset")
+parser.add_argument("--stage2_dataset", type=str, help="Path for stage2 dataset")
+parser.add_argument("--pathmodel1",  type=str, help="Path for model A")
+parser.add_argument("--pathmodel_select",  type=str, help="Path for cropper")
+parser.add_argument("--pathmodel2",  type=str, help="Path for model B")
 parser.add_argument("--batch_size", default=32, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
-parser.add_argument("--select_net", default=0, type=int, help="Choose B structure, 0: custom 16 layer, 1: Res-18")
+parser.add_argument("--select_net", default=1, type=int, help="Choose B structure, 0: custom 16 layer, 1: Res-18")
 parser.add_argument("--f1_eval", default=1, type=int, help="using f1_score as eval")
 parser.add_argument("--datamore", default=1, type=int, help="enable data augmentation")
 parser.add_argument("--pretrainA", default=1, type=int, help="Load ModelA pretrain")
@@ -43,8 +48,8 @@ print(args)
 
 # Dataset and Dataloader
 # Dataset Read_in Part
-root_dir = "/data1/yinzi/datas"
-parts_root_dir = "/home/yinzi/data3/recroped_parts"
+root_dir = args.stage1_dataset
+parts_root_dir = args.stage2_dataset
 
 txt_file_names = {
     'train': "exemplars.txt",
@@ -289,12 +294,15 @@ class TrainModel(TemplateModel):
         print('save model at {}'.format(fname))
 
     def load_pretrained(self, model, mode=None):
-        path_model1 = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_AB_res/e0de5954", 'best.pth.tar')
-        if mode == 0:
-            path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_custom/122c2032", 'best.pth.tar')
-        elif mode == 1:
-            path_select = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_AB_res/e0de5954", 'best.pth.tar')
-        path_model2 = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_C/c1f2ab1a", "best.pth.tar")
+        # path_model1 = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_AB_res/e0de5954", 'best.pth.tar')
+        path_model1 = args.pathmodel1
+        # if mode == 0:
+            # path_select = os.path.join("/home/yinzi/data4/new_train/checkpoints_AB_custom/122c2032", 'best.pth.tar')
+        # elif mode == 1:
+        # path_select = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_AB_res/e0de5954", 'best.pth.tar')
+        path_select = args.pathmodel_select
+        # path_model2 = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_C/c1f2ab1a", "best.pth.tar")
+        path_model2 = args.pathmodel2
         if model == 'model1':
             fname = path_model1
             state = torch.load(fname, map_location=self.device)

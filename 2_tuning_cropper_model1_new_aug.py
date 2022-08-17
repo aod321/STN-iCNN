@@ -24,6 +24,9 @@ from prefetch_generator import BackgroundGenerator
 uuid = str(uid.uuid1())[0:8]
 print(uuid)
 parser = argparse.ArgumentParser()
+parser.add_argument("--stage1_dataset", type=str, help="Path for stage1 dataset")
+parser.add_argument("--stage2_dataset", type=str, help="Path for stage2 dataset")
+parser.add_argument("--pathmodelA",  type=str, help="Path for model A")
 parser.add_argument("--batch_size", default=64, type=int, help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10, type=int, help="Display frequency")
 parser.add_argument("--select_net", default=1, type=int, help="Choose B structure, 0: custom 16 layer, 1: Res-18")
@@ -39,8 +42,8 @@ print(args)
 
 # Dataset and Dataloader
 # Dataset Read_in Part
-root_dir = "/data1/yinzi/datas"
-parts_root_dir = "/home/yinzi/data3/recroped_parts"
+root_dir = args.stage1_dataset
+parts_root_dir = args.stage2_dataset
 
 txt_file_names = {
     'train': "exemplars.txt",
@@ -279,7 +282,8 @@ class TrainModel(TemplateModel):
 
     def load_pretrained(self, model, mode=None):
         # path_modelA = os.path.join("/home/yinzi/data4/new_train/checkpoints_A/b1d730ea", 'best.pth.tar')
-        path_modelA = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_A/48fb8cd4", 'best.pth.tar')
+        # path_modelA = os.path.join("/home/yinzi/data4/STN-iCNN/checkpoints_A/48fb8cd4", 'best.pth.tar')
+        path_modelA = args.path_modelA
         if mode == 0:
             path_modelB_select_net = os.path.join("/home/yinzi/data4/new_train/checkpoints_B_selectnet/cab2d814",
                                                   'best.pth.tar')

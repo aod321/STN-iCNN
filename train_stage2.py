@@ -22,8 +22,10 @@ import os
 uuid = str(uid.uuid1())[0:8]
 print(uuid)
 parser = argparse.ArgumentParser()
-parser.add_argument("--augmode", default='1t4', type=str,
-                    help="1t4,2t3,2t4,3t2")
+# parser.add_argument("--augmode", default='1t4', type=str,
+                    # help="1t4,2t3,2t4,3t2")
+parser.add_argument("--stage1_dataset", type=str, help="Path for stage1 dataset")
+parser.add_argument("--stage2_dataset", type=str, help="Path for stage2 dataset")
 parser.add_argument("--batch_size", default=16, type=int,
                     help="Batch size to use during training.")
 parser.add_argument("--display_freq", default=10,
@@ -50,29 +52,12 @@ parser.add_argument("--epochs", default=25, type=int,
 parser.add_argument("--eval_per_epoch", default=1,
                     type=int, help="eval_per_epoch ")
 args = parser.parse_args()
-print(args)
-if args.augmode == '1t4':
-    print("1t4!!")
-    from data_augmentation import Stage2Augmentation
-if args.augmode == '1t2':
-    print("1t2!!")
-    from data_augmentation_1t2 import Stage2Augmentation
-if args.augmode == '1t3':
-    print("1t3!!")
-    from data_augmentation_1t3 import Stage2Augmentation
-elif args.augmode == '2t3':
-    print("2t3!!")
-    from data_augmentation_2t3 import Stage2Augmentation
-elif args.augmode == '2t4':
-    print("2t4!!")
-    from data_augmentation_2t4 import Stage2Augmentation
-elif args.augmode == '3t2':
-    print("3t2!!")
-    from data_augmentation_3t2 import Stage2Augmentation
+# print(args)
+from data_augmentation import Stage2Augmentation
     
 # Dataset Read_in Part
-root_dir = "/data1/yinzi/datas"
-parts_root_dir = "/home/yinzi/data3/recroped_parts"
+root_dir = args.stage1_dataset
+parts_root_dir = args.stage2_dataset
 
 txt_file_names = {
     'train': "exemplars.txt",
