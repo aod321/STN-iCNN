@@ -9,7 +9,7 @@ offical STN-iCNN codes
 
 ## Support Test
 - Ubuntu 18.04,20.04 and 22.04 tested
-- NVIDIA 10801TI, RTX 3090, A40, cuda 11.1, 11.3, 11.4, 11.6 tested
+- NVIDIA 1080Ti, RTX 3090, A40, cuda 11.1, 11.3, 11.4, 11.6 tested
 - torch==1.8.2, torchvision==0.9.2 tested
 - torch==1.11.0, torchvision==0.12.0 tested
 
